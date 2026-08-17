@@ -1,0 +1,35 @@
+# Private Planning & Blueprints
+blueprint/
+docs/
+ideas/
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.env
+.env*
+
+# Local Database & Storage
+data/
+*.db
+*.sqlite3
+
+# Logs & Telemetry
+logs/
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
