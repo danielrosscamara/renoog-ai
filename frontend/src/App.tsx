@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { MessageBubble } from './components/chat/MessageBubble';
+import { ChatInputBar } from './components/chat/ChatInputBar';
 import { useChatStore } from './stores/useChatStore';
 import { Bot } from 'lucide-react';
 
@@ -13,14 +14,23 @@ export const App: React.FC = () => {
     messageTurns,
     activePersonaId,
     activeView,
+    isStreaming,
     setSwipeIndex,
     rerollMessage,
+    sendMessage,
   } = useChatStore();
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
   const activeTurns = activeChatId ? messageTurns[activeChatId] || [] : [];
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when a new message is added
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeTurns.length]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100">
@@ -70,7 +80,17 @@ export const App: React.FC = () => {
                   }}
                 />
               ))}
+              <div ref={messagesEndRef} />
             </div>
+
+            {/* Bottom Input Cockpit */}
+            <ChatInputBar
+              characterName={currentChar.name}
+              isStreaming={isStreaming}
+              onSendMessage={(text) => {
+                if (activeChatId) sendMessage(activeChatId, text);
+              }}
+            />
           </>
         ) : (
           /* Placeholder View for Discover / Personas / Settings */
