@@ -197,7 +197,7 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       className={`relative flex flex-col h-screen bg-[#18181b] border-r border-[#27272a] transition-all duration-300 ease-in-out z-20 ${
-        isSidebarOpen ? 'w-72' : 'w-[4.5rem]'
+        isSidebarOpen ? 'w-72' : 'w-18'
       }`}
     >
       {/* Zone 1: Brand Header & Collapse Toggle */}
