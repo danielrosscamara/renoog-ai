@@ -155,18 +155,27 @@ export const Sidebar: React.FC = () => {
     characters,
     personas,
     activeChatId,
+    activeCharacterId,
     activePersonaId,
     activeView,
     isSidebarOpen,
     setActiveChat,
     setActiveView,
     setActivePersona,
+    createNewChat,
     toggleSidebar,
   } = useChatStore();
 
   const [search, setSearch] = useState('');
   const [personaOpen, setPersonaOpen] = useState(false);
   const personaRef = useRef<HTMLDivElement>(null);
+
+  const handleNewChat = () => {
+    const targetCharId = activeCharacterId || characters[0]?.id;
+    if (targetCharId) {
+      createNewChat(targetCharId);
+    }
+  };
 
   // Close persona popover on outside click
   useEffect(() => {
@@ -230,10 +239,10 @@ export const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      {/* Zone 2: Primary Action — New Chat */}
+      {/* Zone 2: Primary Action — New Chat with current character */}
       <div className="p-3">
         <button
-          onClick={() => setActiveView('gallery')}
+          onClick={handleNewChat}
           className={`flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm shadow-md transition-all ${
             !isSidebarOpen ? 'px-0' : ''
           }`}
