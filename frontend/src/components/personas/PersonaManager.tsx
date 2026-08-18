@@ -8,7 +8,7 @@ import {
   X,
   Image as ImageIcon,
   ShieldCheck,
-  BookOpen
+  BookOpen,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Persona } from '../../types';
@@ -23,7 +23,13 @@ const AVATAR_PRESETS = [
 ];
 
 export const PersonaManager: React.FC = () => {
-  const { personas, activePersonaId, setActivePersona } = useChatStore();
+  const {
+    personas,
+    activePersonaId,
+    setActivePersona,
+    addPersona,
+    updatePersona,
+  } = useChatStore();
 
   // Local state for modal editor
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,21 +66,20 @@ export const PersonaManager: React.FC = () => {
     if (!name.trim()) return;
 
     if (editingPersona) {
-      // Update existing persona in state
-      editingPersona.name = name.trim();
-      editingPersona.description = description.trim();
-      editingPersona.avatar_url = avatarUrl.trim() || AVATAR_PRESETS[0];
+      // Update existing persona immutably via Zustand store action
+      updatePersona(editingPersona.id, {
+        name: name.trim(),
+        description: description.trim(),
+        avatar_url: avatarUrl.trim() || AVATAR_PRESETS[0],
+      });
     } else {
-      // Create new persona
-      const newPersona: Persona = {
-        id: `persona_${Date.now()}`,
+      // Create new persona immutably via Zustand store action
+      addPersona({
         name: name.trim(),
         description: description.trim(),
         avatar_url: avatarUrl.trim() || AVATAR_PRESETS[0],
         is_default: false,
-      };
-      personas.push(newPersona);
-      setActivePersona(newPersona.id);
+      });
     }
 
     closeModal();
@@ -145,7 +150,7 @@ export const PersonaManager: React.FC = () => {
                       />
                       {isActive && (
                         <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-[#18181b] flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5 text-black stroke-[3]" />
+                          <Check className="w-2.5 h-2.5 text-black stroke-3" />
                         </span>
                       )}
                     </div>
@@ -177,7 +182,7 @@ export const PersonaManager: React.FC = () => {
                 </div>
 
                 {/* Backstory & Bio */}
-                <p className="text-xs text-zinc-300 line-clamp-4 leading-relaxed bg-[#121214] p-3 rounded-xl border border-[#232326] mb-4 min-h-[5.5rem]">
+                <p className="text-xs text-zinc-300 line-clamp-4 leading-relaxed bg-[#121214] p-3 rounded-xl border border-[#232326] mb-4 min-h-22">
                   {persona.description || <span className="italic text-zinc-600">No backstory provided yet.</span>}
                 </p>
               </div>
