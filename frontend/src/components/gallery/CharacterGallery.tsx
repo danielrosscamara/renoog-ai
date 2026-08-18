@@ -18,7 +18,7 @@ export const CharacterGallery: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
 
-  // Filter characters based on search query and selected genre tag
+  // Filter characters based on search query and selected genre tags
   const filteredCharacters = characters.filter((char) => {
     const matchesTag =
       selectedTag === 'All' ||
