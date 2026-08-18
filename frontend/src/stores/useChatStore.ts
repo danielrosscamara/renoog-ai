@@ -24,6 +24,9 @@ export interface ChatState {
   sendMessage: (chatId: string, text: string) => void;
   rerollMessage: (chatId: string, turnId: string) => void;
   createNewChat: (characterId: string) => string;
+  addPersona: (personaData: Omit<Persona, 'id'>) => string;
+  updatePersona: (id: string, updates: Partial<Persona>) => void;
+  deletePersona: (id: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -168,5 +171,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     return newChatId;
+  },
+
+  addPersona: (personaData: Omit<Persona, 'id'>) => {
+    const newId = `persona_${Date.now()}`;
+    const newPersona: Persona = {
+      ...personaData,
+      id: newId,
+    };
+    set((state) => ({
+      personas: [...state.personas, newPersona],
+      activePersonaId: newId,
+    }));
+    return newId;
+  },
+
+  updatePersona: (id: string, updates: Partial<Persona>) => {
+    set((state) => ({
+      personas: state.personas.map((p) =>
+        p.id === id ? { ...p, ...updates } : p
+      ),
+    }));
+  },
+
+  deletePersona: (id: string) => {
+    set((state) => {
+      const filtered = state.personas.filter((p) => p.id !== id);
+      const newActive = state.activePersonaId === id && filtered.length > 0
+        ? filtered[0].id
+        : state.activePersonaId;
+
+      return {
+        personas: filtered,
+        activePersonaId: newActive,
+      };
+    });
   },
 }));
