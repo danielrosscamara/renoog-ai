@@ -1,11 +1,13 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { MessageBubble } from './components/chat/MessageBubble';
 import { ChatInputBar } from './components/chat/ChatInputBar';
 import { CharacterGallery } from './components/gallery/CharacterGallery';
 import { PersonaManager } from './components/personas/PersonaManager';
 import { SettingsView } from './components/settings/SettingsView';
+import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
+import { Brain } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -21,6 +23,8 @@ export const App: React.FC = () => {
     rerollMessage,
     sendMessage,
   } = useChatStore();
+
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -67,6 +71,16 @@ export const App: React.FC = () => {
                   <p className="text-xs text-zinc-400 truncate max-w-md">{currentChar.tagline}</p>
                 </div>
               </div>
+
+              {/* Prompt Inspector Action Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsInspectorOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
+              >
+                <Brain className="w-4 h-4 text-indigo-400" />
+                <span className="hidden sm:inline">Inspect Prompt</span>
+              </button>
             </header>
 
             {/* Scrollable Message List */}
@@ -96,6 +110,18 @@ export const App: React.FC = () => {
                 if (activeChatId) sendMessage(activeChatId, text);
               }}
             />
+
+            {/* 6-Layer Prompt Inspector Modal */}
+            {isInspectorOpen && (
+              <PromptInspector
+                character={currentChar}
+                persona={currentPersona}
+                turns={activeTurns}
+                modelName={currentChat.model_name}
+                temperature={currentChat.temperature}
+                onClose={() => setIsInspectorOpen(false)}
+              />
+            )}
           </>
         )}
 
