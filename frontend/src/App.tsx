@@ -2,8 +2,9 @@ import React, { useRef, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { MessageBubble } from './components/chat/MessageBubble';
 import { ChatInputBar } from './components/chat/ChatInputBar';
+import { CharacterGallery } from './components/gallery/CharacterGallery';
 import { useChatStore } from './stores/useChatStore';
-import { Bot } from 'lucide-react';
+import { UserCircle, Settings as SettingsIcon } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -27,21 +28,24 @@ export const App: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when a new message is added
+  // Auto-scroll to bottom when a new message is added in chat view
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeTurns.length]);
+    if (activeView === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeTurns.length, activeView]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100">
       {/* 1. Collapsible Sidebar */}
       <Sidebar />
 
-      {/* 2. Chat Stage Area */}
+      {/* 2. Main Dynamic Stage Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#121214]">
-        {activeView === 'chat' && currentChat && currentChar ? (
+        {/* VIEW A: Roleplay Chat Stage */}
+        {activeView === 'chat' && currentChat && currentChar && (
           <>
-            {/* Chat Top Header */}
+            {/* Chat Header */}
             <header className="flex items-center justify-between px-6 py-3.5 border-b border-[#27272a] bg-[#18181b]/80 backdrop-blur-md shrink-0">
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -92,19 +96,36 @@ export const App: React.FC = () => {
               }}
             />
           </>
-        ) : (
-          /* Placeholder View for Discover / Personas / Settings */
+        )}
+
+        {/* VIEW B: Discover / Character Gallery */}
+        {activeView === 'gallery' && <CharacterGallery />}
+
+        {/* VIEW C: Personas Manager Placeholder */}
+        {activeView === 'personas' && (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="max-w-md p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl">
-              <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
-                <Bot className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+                <UserCircle className="w-6 h-6" />
               </div>
-              <span className="inline-block px-3 py-1 mb-2 text-xs font-semibold text-blue-400 bg-blue-500/10 rounded-full border border-blue-500/20">
-                VIEW: {activeView.toUpperCase()}
-              </span>
-              <h2 className="text-lg font-bold text-white mb-2">View under construction</h2>
+              <h2 className="text-lg font-bold text-white mb-2">Persona Manager</h2>
               <p className="text-xs text-zinc-400 mb-4">
-                Click any chat in the sidebar to return to the interactive conversation stage!
+                Configure your custom <code className="text-emerald-400">{"{{user}}"}</code> identities, backstories, and avatars.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW D: Settings Placeholder */}
+        {activeView === 'settings' && (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div className="max-w-md p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl">
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
+                <SettingsIcon className="w-6 h-6" />
+              </div>
+              <h2 className="text-lg font-bold text-white mb-2">App & Model Settings</h2>
+              <p className="text-xs text-zinc-400 mb-4">
+                OpenRouter API key, model selection, temperature slider, and generation parameters.
               </p>
             </div>
           </div>
