@@ -4,8 +4,8 @@ import { MessageBubble } from './components/chat/MessageBubble';
 import { ChatInputBar } from './components/chat/ChatInputBar';
 import { CharacterGallery } from './components/gallery/CharacterGallery';
 import { PersonaManager } from './components/personas/PersonaManager';
+import { SettingsView } from './components/settings/SettingsView';
 import { useChatStore } from './stores/useChatStore';
-import { Settings as SettingsIcon } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -105,20 +105,8 @@ export const App: React.FC = () => {
         {/* VIEW C: Personas Manager */}
         {activeView === 'personas' && <PersonaManager />}
 
-        {/* VIEW D: Settings Placeholder */}
-        {activeView === 'settings' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <div className="max-w-md p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
-                <SettingsIcon className="w-6 h-6" />
-              </div>
-              <h2 className="text-lg font-bold text-white mb-2">App & Model Settings</h2>
-              <p className="text-xs text-zinc-400 mb-4">
-                OpenRouter API key, model selection, temperature slider, and generation parameters.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* VIEW D: App & Model Settings */}
+        {activeView === 'settings' && <SettingsView />}
       </main>
     </div>
   );
