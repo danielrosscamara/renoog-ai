@@ -3,8 +3,9 @@ import { Sidebar } from './components/layout/Sidebar';
 import { MessageBubble } from './components/chat/MessageBubble';
 import { ChatInputBar } from './components/chat/ChatInputBar';
 import { CharacterGallery } from './components/gallery/CharacterGallery';
+import { PersonaManager } from './components/personas/PersonaManager';
 import { useChatStore } from './stores/useChatStore';
-import { UserCircle, Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -101,20 +102,8 @@ export const App: React.FC = () => {
         {/* VIEW B: Discover / Character Gallery */}
         {activeView === 'gallery' && <CharacterGallery />}
 
-        {/* VIEW C: Personas Manager Placeholder */}
-        {activeView === 'personas' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <div className="max-w-md p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
-                <UserCircle className="w-6 h-6" />
-              </div>
-              <h2 className="text-lg font-bold text-white mb-2">Persona Manager</h2>
-              <p className="text-xs text-zinc-400 mb-4">
-                Configure your custom <code className="text-emerald-400">{"{{user}}"}</code> identities, backstories, and avatars.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* VIEW C: Personas Manager */}
+        {activeView === 'personas' && <PersonaManager />}
 
         {/* VIEW D: Settings Placeholder */}
         {activeView === 'settings' && (
