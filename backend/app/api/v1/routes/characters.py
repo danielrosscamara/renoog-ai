@@ -1,4 +1,5 @@
 import base64
+import os
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,8 @@ from app.db.models import CharacterModel
 from app.schemas.character import CharacterCreate, CharacterRead
 
 router = APIRouter(prefix="/characters", tags=["Characters"])
+
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 @router.get("", response_model=list[CharacterRead])
 async def get_characters(
@@ -55,42 +58,96 @@ async def create_character(data: CharacterCreate, db: AsyncSession = Depends(get
     await db.refresh(character)
     return character
 
+@router.put("/{character_id}", response_model=CharacterRead)
+async def update_character(
+    character_id: str,
+    data: CharacterCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an existing character card."""
+    stmt = select(CharacterModel).where(CharacterModel.id == character_id)
+    character = (await db.execute(stmt)).scalar_one_or_none()
+    if not character:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Character with ID '{character_id}' not found."
+        )
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(character, field, value)
+
+    await db.commit()
+    await db.refresh(character)
+    return character
+
 @router.post("/import-png", response_model=CharacterRead, status_code=status.HTTP_201_CREATED)
-async def import_character_from_png(
+async def import_character_from_image(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload and parse a TavernAI V2 / V1 character card PNG."""
-    if not file.filename or not file.filename.lower().endswith(".png"):
+    """
+    Universal Image & TavernAI Ingestion:
+    - Parses embedded metadata if TavernAI V2 PNG.
+    - If regular image (PNG/JPG/WEBP), generates a clean draft character ready for in-modal editing.
+    """
+    if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be a .png image."
+            detail="Uploaded file must have a valid filename."
+        )
+
+    _, ext = os.path.splitext(file.filename.lower())
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported format '{ext}'. Allowed formats: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
         )
 
     file_bytes = await file.read()
-    try:
-        parsed_card = extract_tavern_card_from_png(file_bytes)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid character card PNG: {str(e)}"
+
+    # Determine MIME type for Base64 Data URI
+    mime_type = "image/png" if ext == ".png" else ("image/webp" if ext == ".webp" else "image/jpeg")
+    b64_avatar = f"data:{mime_type};base64,{base64.b64encode(file_bytes).decode('ascii')}"
+
+    # Clean filename into a natural character title (e.g., 'samira_v2.png' -> 'Samira V2')
+    base_name = os.path.splitext(file.filename)[0]
+    cleaned_name = " ".join(part.capitalize() for part in base_name.replace("_", " ").replace("-", " ").split())
+
+    parsed_card = None
+    if ext == ".png":
+        try:
+            parsed_card = extract_tavern_card_from_png(file_bytes)
+        except Exception:
+            parsed_card = None
+
+    if parsed_card:
+        # Rich TavernAI V2 Card extracted successfully
+        character = CharacterModel(
+            name=parsed_card["name"],
+            tagline=parsed_card["tagline"],
+            description=parsed_card["description"],
+            personality=parsed_card["personality"],
+            scenario=parsed_card["scenario"],
+            first_mes=parsed_card["first_mes"],
+            mes_example=parsed_card["mes_example"],
+            tags=parsed_card["tags"],
+            avatar_url=b64_avatar,
+            creator="TavernAI V2 Card"
         )
-
-    # Convert uploaded PNG image to Base64 Data URI for avatar
-    b64_avatar = f"data:image/png;base64,{base64.b64encode(file_bytes).decode('ascii')}"
-
-    character = CharacterModel(
-        name=parsed_card["name"],
-        tagline=parsed_card["tagline"],
-        description=parsed_card["description"],
-        personality=parsed_card["personality"],
-        scenario=parsed_card["scenario"],
-        first_mes=parsed_card["first_mes"],
-        mes_example=parsed_card["mes_example"],
-        tags=parsed_card["tags"],
-        avatar_url=b64_avatar,
-        creator="TavernAI Importer"
-    )
+    else:
+        # Standard Raw Image: generate smart customizable draft
+        character = CharacterModel(
+            name=cleaned_name or "New Companion",
+            tagline=f"Custom character created from {file.filename}",
+            description=f"A captivating character named {cleaned_name or 'Companion'}.",
+            personality="Enigmatic, confident, and ready for adventure.",
+            scenario="You meet during your journey across uncharted realms.",
+            first_mes=f"*looks in your direction with an attentive gaze.* \"Greetings, traveler. What brings you to this part of the realm?\"",
+            mes_example="",
+            tags=["Custom", "Adventure"],
+            avatar_url=b64_avatar,
+            creator="Image Draft (No Metadata)"
+        )
 
     db.add(character)
     await db.commit()
@@ -110,11 +167,13 @@ async def export_character_to_png(character_id: str, db: AsyncSession = Depends(
 
     # Extract base PNG bytes from avatar_url or generate standard 1x1 fallback
     avatar_url = str(getattr(character, "avatar_url", "") or "")
-    if avatar_url and avatar_url.startswith("data:image/png;base64,"):
+    if avatar_url and "base64," in avatar_url:
         raw_b64 = avatar_url.split("base64,")[1]
-        base_png_bytes = base64.b64decode(raw_b64)
+        try:
+            base_png_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            base_png_bytes = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
     else:
-        # Minimal 1x1 valid transparent PNG fallback
         base_png_bytes = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 
     char_dict = {
