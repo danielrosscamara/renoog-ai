@@ -31,6 +31,7 @@ export interface ChatState {
   addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
+  updateCharacter: (id: string, updates: Partial<Character>) => Promise<void>;
   importCharacterPng: (file: File) => Promise<Character>;
   exportCharacterPng: (characterId: string) => Promise<void>;
 }
@@ -413,6 +414,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await api.deletePersona(id);
     } catch {
       // Retain deletion
+    }
+  },
+
+  updateCharacter: async (id: string, updates: Partial<Character>) => {
+    set((state) => ({
+      characters: state.characters.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    }));
+    try {
+      await api.updateCharacter(id, updates);
+    } catch {
+      // Retain optimistic update
     }
   },
 
