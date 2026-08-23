@@ -29,6 +29,7 @@ export interface MessageTurn {
   active_index: number;
   swipes: string[];
   created_at: string;
+  persona_id?: string;
 }
 
 export interface Chat {
