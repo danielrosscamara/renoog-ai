@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Character, Persona, Chat, MessageTurn } from '../types';
+import { api } from '../services/api';
 import { MOCK_CHARACTERS, MOCK_PERSONAS, MOCK_CHATS, MOCK_MESSAGE_TURNS } from '../data/mockData';
 
 export interface ChatState {
@@ -13,20 +14,22 @@ export interface ChatState {
   activeView: 'chat' | 'gallery' | 'personas' | 'settings';
   isSidebarOpen: boolean;
   isStreaming: boolean;
+  isLoading: boolean;
+  streamingError: string | null;
 
   // Actions
-  setActiveChat: (chatId: string) => void;
+  initializeData: () => Promise<void>;
+  setActiveChat: (chatId: string) => Promise<void>;
   setActiveCharacter: (characterId: string) => void;
   setActivePersona: (personaId: string) => void;
   setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings') => void;
   toggleSidebar: () => void;
-  setSwipeIndex: (chatId: string, turnId: string, index: number) => void;
-  sendMessage: (chatId: string, text: string) => void;
-  rerollMessage: (chatId: string, turnId: string) => void;
-  createNewChat: (characterId: string) => string;
-  addPersona: (personaData: Omit<Persona, 'id'>) => string;
-  updatePersona: (id: string, updates: Partial<Persona>) => void;
-  deletePersona: (id: string) => void;
+  setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
+  sendMessage: (chatId: string, text: string) => Promise<void>;
+  createNewChat: (characterId: string) => Promise<string>;
+  addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
+  updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
+  deletePersona: (id: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -40,14 +43,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeView: 'chat',
   isSidebarOpen: true,
   isStreaming: false,
+  isLoading: false,
+  streamingError: null,
 
-  setActiveChat: (chatId: string) => {
+  initializeData: async () => {
+    try {
+      set({ isLoading: true });
+      const [characters, personas, chats] = await Promise.all([
+        api.getCharacters(),
+        api.getPersonas(),
+        api.getChats(),
+      ]);
+
+      const defaultPersona = personas.find((p) => p.is_default) || personas[0];
+      const initialChat = chats[0];
+
+      set({
+        characters: characters.length > 0 ? characters : get().characters,
+        personas: personas.length > 0 ? personas : get().personas,
+        chats: chats.length > 0 ? chats : get().chats,
+        activePersonaId: defaultPersona ? defaultPersona.id : get().activePersonaId,
+        isLoading: false,
+      });
+
+      if (initialChat) {
+        await get().setActiveChat(initialChat.id);
+      }
+    } catch {
+      // Fallback to mock data if server isn't online
+      set({ isLoading: false });
+    }
+  },
+
+  setActiveChat: async (chatId: string) => {
     const chat = get().chats.find((c) => c.id === chatId);
     set({
       activeChatId: chatId,
       activeCharacterId: chat ? chat.character_id : get().activeCharacterId,
       activeView: 'chat',
+      streamingError: null,
     });
+
+    try {
+      const { turns } = await api.getChatWithTurns(chatId);
+      set((state) => ({
+        messageTurns: {
+          ...state.messageTurns,
+          [chatId]: turns,
+        },
+      }));
+    } catch {
+      // Keep existing memory turns on error
+    }
   },
 
   setActiveCharacter: (characterId: string) => {
@@ -66,145 +113,213 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({ isSidebarOpen: !state.isSidebarOpen }));
   },
 
-  setSwipeIndex: (chatId: string, turnId: string, index: number) => {
+  setSwipeIndex: async (chatId: string, turnId: string, index: number) => {
+    // Optimistic UI update
     set((state) => {
       const turns = state.messageTurns[chatId] || [];
-      const updatedTurns = turns.map((turn) => {
-        if (turn.id === turnId) {
-          return { ...turn, active_index: index };
-        }
-        return turn;
-      });
-
+      const updatedTurns = turns.map((turn) =>
+        turn.id === turnId ? { ...turn, active_index: index } : turn
+      );
       return {
-        messageTurns: {
-          ...state.messageTurns,
-          [chatId]: updatedTurns,
-        },
+        messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
       };
     });
+
+    try {
+      await api.updateTurnSwipe(chatId, turnId, index);
+    } catch {
+      // Swipe update silently captured
+    }
   },
 
-  sendMessage: (chatId: string, text: string) => {
-    if (!text.trim()) return;
+  sendMessage: async (chatId: string, text: string) => {
+    if (!text.trim() || get().isStreaming) return;
 
-    const newTurnId = `turn_${Date.now()}`;
+    const userTurnId = `turn_user_${Date.now()}`;
+    const assistantTurnId = `turn_assistant_${Date.now()}`;
+
     const userTurn: MessageTurn = {
-      id: newTurnId,
+      id: userTurnId,
       chat_id: chatId,
       role: 'user',
       active_index: 0,
-      swipes: [text],
+      swipes: [text.trim()],
       created_at: new Date().toISOString(),
     };
 
+    const assistantTurnPlaceholder: MessageTurn = {
+      id: assistantTurnId,
+      chat_id: chatId,
+      role: 'assistant',
+      active_index: 0,
+      swipes: [''],
+      created_at: new Date().toISOString(),
+    };
+
+    // Append user turn and empty assistant turn placeholder
     set((state) => {
       const currentTurns = state.messageTurns[chatId] || [];
       return {
+        isStreaming: true,
+        streamingError: null,
         messageTurns: {
           ...state.messageTurns,
-          [chatId]: [...currentTurns, userTurn],
+          [chatId]: [...currentTurns, userTurn, assistantTurnPlaceholder],
         },
       };
     });
-  },
 
-  rerollMessage: (chatId: string, turnId: string) => {
-    set((state) => {
-      const turns = state.messageTurns[chatId] || [];
-      const updatedTurns = turns.map((turn) => {
-        if (turn.id === turnId) {
-          const newSwipeText = `*pauses thoughtfully, her eyes reflecting the glowing clockwork.* "Let us explore a different path."`;
-          const newSwipes = [...turn.swipes, newSwipeText];
+    // Retrieve settings / API key from localStorage if available
+    let storedApiKey = '';
+    let storedModel = '';
+    let storedTemp = 0.9;
+    try {
+      const savedSettings = localStorage.getItem('renoog_app_settings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        storedApiKey = parsed.apiKey || '';
+        storedModel = parsed.selectedModel || '';
+        storedTemp = parsed.temperature ?? 0.9;
+      }
+    } catch {
+      // Use defaults
+    }
+
+    await api.streamChatMessage({
+      chatId,
+      userMessage: text,
+      modelName: storedModel || undefined,
+      temperature: storedTemp,
+      apiKey: storedApiKey || undefined,
+      onToken: (token: string) => {
+        set((state) => {
+          const turns = state.messageTurns[chatId] || [];
+          const updatedTurns = turns.map((turn) => {
+            if (turn.id === assistantTurnId) {
+              const currentSwipe = turn.swipes[0] || '';
+              return {
+                ...turn,
+                swipes: [currentSwipe + token],
+              };
+            }
+            return turn;
+          });
           return {
-            ...turn,
-            swipes: newSwipes,
-            active_index: newSwipes.length - 1,
+            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
           };
-        }
-        return turn;
-      });
-
-      return {
-        messageTurns: {
-          ...state.messageTurns,
-          [chatId]: updatedTurns,
-        },
-      };
+        });
+      },
+      onDone: (savedTurnId: string, fullText: string) => {
+        set((state) => {
+          const turns = state.messageTurns[chatId] || [];
+          const updatedTurns = turns.map((turn) => {
+            if (turn.id === assistantTurnId) {
+              return {
+                ...turn,
+                id: savedTurnId,
+                swipes: [fullText],
+              };
+            }
+            return turn;
+          });
+          return {
+            isStreaming: false,
+            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
+          };
+        });
+      },
+      onError: (err: string) => {
+        set({ isStreaming: false, streamingError: err });
+      },
     });
   },
 
-  createNewChat: (characterId: string) => {
+  createNewChat: async (characterId: string) => {
     const character = get().characters.find((c) => c.id === characterId);
     if (!character) return '';
 
-    const newChatId = `chat_${Date.now()}`;
-    const newChat: Chat = {
-      id: newChatId,
-      character_id: characterId,
-      persona_id: get().activePersonaId,
-      title: `Chat with ${character.name}`,
-      model_name: 'anthropic/claude-3.5-sonnet',
-      temperature: 0.9,
-      is_pinned: false,
-      updated_at: 'Just now',
-    };
-
-    const initialTurn: MessageTurn = {
-      id: `turn_${Date.now()}_greeting`,
-      chat_id: newChatId,
-      role: 'assistant',
-      active_index: 0,
-      swipes: [character.first_mes],
-      created_at: new Date().toISOString(),
-    };
-
-    set((state) => ({
-      chats: [newChat, ...state.chats],
-      activeChatId: newChatId,
-      activeCharacterId: characterId,
-      activeView: 'chat',
-      messageTurns: {
-        ...state.messageTurns,
-        [newChatId]: [initialTurn],
-      },
-    }));
-
-    return newChatId;
+    try {
+      const { chat, turns } = await api.createChat(characterId, get().activePersonaId);
+      set((state) => ({
+        chats: [chat, ...state.chats],
+        activeChatId: chat.id,
+        activeCharacterId: characterId,
+        activeView: 'chat',
+        messageTurns: {
+          ...state.messageTurns,
+          [chat.id]: turns,
+        },
+      }));
+      return chat.id;
+    } catch {
+      // Fallback local creation
+      const newChatId = `chat_${Date.now()}`;
+      const newChat: Chat = {
+        id: newChatId,
+        character_id: characterId,
+        persona_id: get().activePersonaId,
+        title: `Chat with ${character.name}`,
+        model_name: 'anthropic/claude-3.5-sonnet',
+        temperature: 0.9,
+        is_pinned: false,
+        updated_at: 'Just now',
+      };
+      set((state) => ({
+        chats: [newChat, ...state.chats],
+        activeChatId: newChatId,
+        activeCharacterId: characterId,
+        activeView: 'chat',
+      }));
+      return newChatId;
+    }
   },
 
-  addPersona: (personaData: Omit<Persona, 'id'>) => {
-    const newId = `persona_${Date.now()}`;
-    const newPersona: Persona = {
-      ...personaData,
-      id: newId,
-    };
-    set((state) => ({
-      personas: [...state.personas, newPersona],
-      activePersonaId: newId,
-    }));
-    return newId;
+  addPersona: async (personaData: Omit<Persona, 'id'>) => {
+    try {
+      const newPersona = await api.createPersona(personaData);
+      set((state) => ({
+        personas: [...state.personas, newPersona],
+        activePersonaId: newPersona.id,
+      }));
+      return newPersona.id;
+    } catch {
+      const fallbackId = `persona_${Date.now()}`;
+      const newPersona: Persona = { ...personaData, id: fallbackId };
+      set((state) => ({
+        personas: [...state.personas, newPersona],
+        activePersonaId: fallbackId,
+      }));
+      return fallbackId;
+    }
   },
 
-  updatePersona: (id: string, updates: Partial<Persona>) => {
+  updatePersona: async (id: string, updates: Partial<Persona>) => {
     set((state) => ({
-      personas: state.personas.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
-      ),
+      personas: state.personas.map((p) => (p.id === id ? { ...p, ...updates } : p)),
     }));
+    try {
+      await api.updatePersona(id, updates);
+    } catch {
+      // Retain optimistic update
+    }
   },
 
-  deletePersona: (id: string) => {
+  deletePersona: async (id: string) => {
     set((state) => {
       const filtered = state.personas.filter((p) => p.id !== id);
-      const newActive = state.activePersonaId === id && filtered.length > 0
-        ? filtered[0].id
-        : state.activePersonaId;
-
-      return {
-        personas: filtered,
-        activePersonaId: newActive,
-      };
+      const newActive =
+        state.activePersonaId === id && filtered.length > 0
+          ? filtered[0].id
+          : state.activePersonaId;
+      return { personas: filtered, activePersonaId: newActive };
     });
+    try {
+      await api.deletePersona(id);
+    } catch {
+      // Retain deletion
+    }
   },
 }));
+
+// Automatically trigger database hydration on store load
+useChatStore.getState().initializeData();
