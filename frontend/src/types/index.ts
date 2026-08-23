@@ -10,6 +10,7 @@ export interface Character {
   avatar_url: string;
   tags: string[];
   is_favorite: boolean;
+  is_hidden?: boolean;
   creator: string;
   created_at: string;
 }
