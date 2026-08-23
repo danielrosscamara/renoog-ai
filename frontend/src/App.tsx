@@ -86,13 +86,14 @@ export const App: React.FC = () => {
             {/* Scrollable Message List */}
             <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
               {activeTurns.map((turn) => {
-                const chatPersona = personas.find((p) => p.id === currentChat.persona_id) || currentPersona;
+                const authorPersonaId = turn.persona_id || currentChat?.persona_id || activePersonaId;
+                const turnPersona = personas.find((p) => p.id === authorPersonaId) || currentPersona;
                 return (
                   <MessageBubble
                     key={turn.id}
                     turn={turn}
                     character={currentChar}
-                    persona={chatPersona}
+                    persona={turnPersona}
                     onSwipeChange={(turnId, newIndex) => {
                       if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
                     }}
