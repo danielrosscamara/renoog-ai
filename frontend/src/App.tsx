@@ -85,20 +85,23 @@ export const App: React.FC = () => {
 
             {/* Scrollable Message List */}
             <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
-              {activeTurns.map((turn) => (
-                <MessageBubble
-                  key={turn.id}
-                  turn={turn}
-                  character={currentChar}
-                  persona={currentPersona}
-                  onSwipeChange={(turnId, newIndex) => {
-                    if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
-                  }}
-                  onReroll={(turnId) => {
-                    if (activeChatId) rerollMessage(activeChatId, turnId);
-                  }}
-                />
-              ))}
+              {activeTurns.map((turn) => {
+                const chatPersona = personas.find((p) => p.id === currentChat.persona_id) || currentPersona;
+                return (
+                  <MessageBubble
+                    key={turn.id}
+                    turn={turn}
+                    character={currentChar}
+                    persona={chatPersona}
+                    onSwipeChange={(turnId, newIndex) => {
+                      if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
+                    }}
+                    onReroll={(turnId) => {
+                      if (activeChatId) rerollMessage(activeChatId, turnId);
+                    }}
+                  />
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
 
@@ -115,7 +118,7 @@ export const App: React.FC = () => {
             {isInspectorOpen && (
               <PromptInspector
                 character={currentChar}
-                persona={currentPersona}
+                persona={personas.find((p) => p.id === currentChat.persona_id) || currentPersona}
                 turns={activeTurns}
                 modelName={currentChat.model_name}
                 temperature={currentChat.temperature}
