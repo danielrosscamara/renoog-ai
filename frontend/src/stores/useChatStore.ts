@@ -26,6 +26,7 @@ export interface ChatState {
   toggleSidebar: () => void;
   setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
+  rerollMessage: (chatId: string, turnId: string) => Promise<void>;
   createNewChat: (characterId: string) => Promise<string>;
   addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
@@ -70,7 +71,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await get().setActiveChat(initialChat.id);
       }
     } catch {
-      // Fallback to mock data if server isn't online
       set({ isLoading: false });
     }
   },
@@ -114,7 +114,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setSwipeIndex: async (chatId: string, turnId: string, index: number) => {
-    // Optimistic UI update
     set((state) => {
       const turns = state.messageTurns[chatId] || [];
       const updatedTurns = turns.map((turn) =>
@@ -128,7 +127,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       await api.updateTurnSwipe(chatId, turnId, index);
     } catch {
-      // Swipe update silently captured
+      // Retain optimistic index update
     }
   },
 
@@ -156,7 +155,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       created_at: new Date().toISOString(),
     };
 
-    // Append user turn and empty assistant turn placeholder
     set((state) => {
       const currentTurns = state.messageTurns[chatId] || [];
       return {
@@ -169,7 +167,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
-    // Retrieve settings / API key from localStorage if available
     let storedApiKey = '';
     let storedModel = '';
     let storedTemp = 0.9;
@@ -234,6 +231,103 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  rerollMessage: async (chatId: string, turnId: string) => {
+    const turns = get().messageTurns[chatId] || [];
+    const turnIndex = turns.findIndex((t) => t.id === turnId);
+    if (turnIndex === -1 || get().isStreaming) return;
+
+    const prevUserTurn = turns.slice(0, turnIndex).reverse().find((t) => t.role === 'user');
+    const userPrompt = prevUserTurn?.swipes[prevUserTurn.active_index] || '';
+
+    const targetTurn = turns[turnIndex];
+    const newSwipeIndex = targetTurn.swipes.length;
+
+    set((state) => {
+      const currentTurns = state.messageTurns[chatId] || [];
+      const updated = currentTurns.map((t) => {
+        if (t.id === turnId) {
+          return {
+            ...t,
+            swipes: [...t.swipes, ''],
+            active_index: newSwipeIndex,
+          };
+        }
+        return t;
+      });
+      return {
+        isStreaming: true,
+        streamingError: null,
+        messageTurns: { ...state.messageTurns, [chatId]: updated },
+      };
+    });
+
+    let storedApiKey = '';
+    let storedModel = '';
+    let storedTemp = 0.9;
+    try {
+      const savedSettings = localStorage.getItem('renoog_app_settings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        storedApiKey = parsed.apiKey || '';
+        storedModel = parsed.selectedModel || '';
+        storedTemp = parsed.temperature ?? 0.9;
+      }
+    } catch {
+      // Use defaults
+    }
+
+    await api.streamChatMessage({
+      chatId,
+      userMessage: userPrompt,
+      modelName: storedModel || undefined,
+      temperature: storedTemp,
+      apiKey: storedApiKey || undefined,
+      onToken: (token: string) => {
+        set((state) => {
+          const currentTurns = state.messageTurns[chatId] || [];
+          const updated = currentTurns.map((t) => {
+            if (t.id === turnId) {
+              const currentSwipes = [...t.swipes];
+              currentSwipes[newSwipeIndex] = (currentSwipes[newSwipeIndex] || '') + token;
+              return {
+                ...t,
+                swipes: currentSwipes,
+              };
+            }
+            return t;
+          });
+          return {
+            messageTurns: { ...state.messageTurns, [chatId]: updated },
+          };
+        });
+      },
+      onDone: (_savedTurnId: string, fullText: string) => {
+        set((state) => {
+          const currentTurns = state.messageTurns[chatId] || [];
+          const updated = currentTurns.map((t) => {
+            if (t.id === turnId) {
+              const currentSwipes = [...t.swipes];
+              currentSwipes[newSwipeIndex] = fullText;
+              return {
+                ...t,
+                swipes: currentSwipes,
+                active_index: newSwipeIndex,
+              };
+            }
+            return t;
+          });
+          return {
+            isStreaming: false,
+            messageTurns: { ...state.messageTurns, [chatId]: updated },
+          };
+        });
+      },
+      onError: (err: string) => {
+        set({ isStreaming: false, streamingError: err });
+      },
+    });
+  },
+
   createNewChat: async (characterId: string) => {
     const character = get().characters.find((c) => c.id === characterId);
     if (!character) return '';
@@ -252,7 +346,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
       return chat.id;
     } catch {
-      // Fallback local creation
       const newChatId = `chat_${Date.now()}`;
       const newChat: Chat = {
         id: newChatId,
