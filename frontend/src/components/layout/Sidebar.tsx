@@ -277,6 +277,18 @@ export const Sidebar: React.FC = () => {
           <UserCircle className="w-5 h-5 shrink-0 text-emerald-400" />
           {isSidebarOpen && <span>Personas</span>}
         </button>
+
+        <button
+          onClick={() => setActiveView('studio')}
+          className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors ${
+            activeView === 'studio'
+              ? 'bg-[#27272a] text-white'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+          }`}
+        >
+          <Sparkles className="w-5 h-5 shrink-0 text-amber-400" />
+          {isSidebarOpen && <span>Dev Studio</span>}
+        </button>
       </div>
 
       {/* Zone 4: Search Bar (Expanded only) */}
