@@ -5,6 +5,7 @@ import { ChatInputBar } from './components/chat/ChatInputBar';
 import { CharacterGallery } from './components/gallery/CharacterGallery';
 import { PersonaManager } from './components/personas/PersonaManager';
 import { SettingsView } from './components/settings/SettingsView';
+import { DevStudio } from './components/studio/DevStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
 import { Brain } from 'lucide-react';
@@ -137,6 +138,9 @@ export const App: React.FC = () => {
 
         {/* VIEW D: App & Model Settings */}
         {activeView === 'settings' && <SettingsView />}
+
+        {/* VIEW E: Dev Studio & Character Manager */}
+        {activeView === 'studio' && <DevStudio />}
       </main>
     </div>
   );
