@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.png_parser import embed_tavern_card_in_png, extract_tavern_card_from_png
 from app.db.session import get_db
 from app.db.models import CharacterModel
-from app.schemas.character import CharacterCreate, CharacterRead
+from app.schemas.character import CharacterCreate, CharacterRead, CharacterUpdate
 
 router = APIRouter(prefix="/characters", tags=["Characters"])
 
@@ -16,10 +16,14 @@ ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 async def get_characters(
     tag: str | None = None,
     search: str | None = None,
+    include_hidden: bool = False,
     db: AsyncSession = Depends(get_db)
 ):
-    """Fetch all characters with optional tag and search filters."""
+    """Fetch characters with optional tag, search, and visibility filters."""
     stmt = select(CharacterModel).order_by(CharacterModel.is_favorite.desc(), CharacterModel.created_at.desc())
+    if not include_hidden:
+        stmt = stmt.where(CharacterModel.is_hidden == False)  # noqa: E712
+
     result = await db.execute(stmt)
     characters = result.scalars().all()
 
@@ -61,7 +65,7 @@ async def create_character(data: CharacterCreate, db: AsyncSession = Depends(get
 @router.put("/{character_id}", response_model=CharacterRead)
 async def update_character(
     character_id: str,
-    data: CharacterCreate,
+    data: CharacterUpdate,
     db: AsyncSession = Depends(get_db)
 ):
     """Update an existing character card."""
@@ -76,6 +80,23 @@ async def update_character(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(character, field, value)
 
+    await db.commit()
+    await db.refresh(character)
+    return character
+
+@router.patch("/{character_id}/visibility", response_model=CharacterRead)
+async def toggle_character_visibility(character_id: str, db: AsyncSession = Depends(get_db)):
+    """Toggle a character's visibility status (Public vs Hidden)."""
+    stmt = select(CharacterModel).where(CharacterModel.id == character_id)
+    character = (await db.execute(stmt)).scalar_one_or_none()
+    if not character:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Character with ID '{character_id}' not found."
+        )
+
+    current_val = bool(getattr(character, "is_hidden", False))
+    setattr(character, "is_hidden", not current_val)
     await db.commit()
     await db.refresh(character)
     return character
@@ -132,7 +153,8 @@ async def import_character_from_image(
             mes_example=parsed_card["mes_example"],
             tags=parsed_card["tags"],
             avatar_url=b64_avatar,
-            creator="TavernAI V2 Card"
+            creator="TavernAI V2 Card",
+            is_hidden=False
         )
     else:
         # Standard Raw Image: generate smart customizable draft
@@ -146,7 +168,8 @@ async def import_character_from_image(
             mes_example="",
             tags=["Custom", "Adventure"],
             avatar_url=b64_avatar,
-            creator="Image Draft (No Metadata)"
+            creator="Image Draft (No Metadata)",
+            is_hidden=False
         )
 
     db.add(character)
