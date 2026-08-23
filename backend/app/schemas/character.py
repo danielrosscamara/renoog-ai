@@ -12,6 +12,7 @@ class CharacterBase(BaseModel):
     avatar_url: str | None = Field(None, description="Image URL or Base64 Data URI")
     tags: list[str] = Field(default_factory=list, description="Genre tags (Fantasy, Cyberpunk, etc.)")
     is_favorite: bool = Field(default=False)
+    is_hidden: bool = Field(default=False)
     creator: str = Field(default="Renoog Team")
 
 class CharacterCreate(CharacterBase):
@@ -28,6 +29,7 @@ class CharacterUpdate(BaseModel):
     avatar_url: str | None = None
     tags: list[str] | None = None
     is_favorite: bool | None = None
+    is_hidden: bool | None = None
 
 class CharacterRead(CharacterBase):
     id: str
