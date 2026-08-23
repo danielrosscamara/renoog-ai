@@ -185,4 +185,35 @@ export const api = {
       onError(msg);
     }
   },
+
+  // TavernAI PNG Import & Export
+  async importCharacterFromPng(file: File): Promise<Character> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(`${API_BASE_URL}/characters/import-png`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ detail: 'Failed to parse character PNG' }));
+      throw new Error(errJson.detail || 'Failed to import character PNG');
+    }
+    return res.json();
+  },
+
+  async exportCharacterToPng(characterId: string, characterName: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/characters/${characterId}/export-png`);
+    if (!res.ok) throw new Error('Failed to export character PNG');
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${characterName.replace(/[^a-z0-9_-]/gi, '_')}.png`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
 };
