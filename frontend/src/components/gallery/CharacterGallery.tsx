@@ -45,6 +45,9 @@ export const CharacterGallery: React.FC = () => {
 
   // Filter characters based on search query and selected genre tags
   const filteredCharacters = characters.filter((char) => {
+    // Exclude hidden characters from the public Discover gallery
+    if (char.is_hidden) return false;
+
     const matchesTag =
       selectedTag === 'All' ||
       char.tags.some((t) => t.toLowerCase() === selectedTag.toLowerCase());
