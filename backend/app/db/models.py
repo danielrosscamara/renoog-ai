@@ -34,6 +34,7 @@ class CharacterModel(Base):
     avatar_url = Column(Text, nullable=True)
     tags = Column(JSON, default=list)
     is_favorite = Column(Boolean, default=False)
+    is_hidden = Column(Boolean, default=False)
     creator = Column(String(100), default="Renoog Team")
     created_at = Column(DateTime, default=utcnow)
 
