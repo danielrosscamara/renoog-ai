@@ -11,7 +11,7 @@ export interface ChatState {
   activeChatId: string | null;
   activeCharacterId: string | null;
   activePersonaId: string;
-  activeView: 'chat' | 'gallery' | 'personas' | 'settings';
+  activeView: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio';
   isSidebarOpen: boolean;
   isStreaming: boolean;
   isLoading: boolean;
@@ -22,7 +22,7 @@ export interface ChatState {
   setActiveChat: (chatId: string) => Promise<void>;
   setActiveCharacter: (characterId: string) => void;
   setActivePersona: (personaId: string) => void;
-  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings') => void;
+  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => void;
   toggleSidebar: () => void;
   setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
@@ -32,6 +32,8 @@ export interface ChatState {
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
   updateCharacter: (id: string, updates: Partial<Character>) => Promise<void>;
+  toggleCharacterVisibility: (characterId: string) => Promise<void>;
+  deleteCharacter: (characterId: string) => Promise<void>;
   importCharacterPng: (file: File) => Promise<Character>;
   exportCharacterPng: (characterId: string) => Promise<void>;
 }
@@ -54,7 +56,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       set({ isLoading: true });
       const [characters, personas, chats] = await Promise.all([
-        api.getCharacters(),
+        api.getCharacters(true),
         api.getPersonas(),
         api.getChats(),
       ]);
@@ -108,7 +110,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activePersonaId: personaId });
   },
 
-  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings') => {
+  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => {
     set({ activeView: view });
   },
 
@@ -425,6 +427,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await api.updateCharacter(id, updates);
     } catch {
       // Retain optimistic update
+    }
+  },
+
+  toggleCharacterVisibility: async (characterId: string) => {
+    set((state) => ({
+      characters: state.characters.map((c) =>
+        c.id === characterId ? { ...c, is_hidden: !c.is_hidden } : c
+      ),
+    }));
+    try {
+      await api.toggleCharacterVisibility(characterId);
+    } catch {
+      // Retain optimistic update
+    }
+  },
+
+  deleteCharacter: async (characterId: string) => {
+    set((state) => {
+      const filtered = state.characters.filter((c) => c.id !== characterId);
+      const newActive =
+        state.activeCharacterId === characterId && filtered.length > 0
+          ? filtered[0].id
+          : state.activeCharacterId;
+      return { characters: filtered, activeCharacterId: newActive };
+    });
+    try {
+      await api.deleteCharacter(characterId);
+    } catch {
+      // Retain deletion
     }
   },
 
