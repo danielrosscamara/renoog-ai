@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Search, MessageSquare, Sparkles, Tag, Plus, Upload, Download, Loader2, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Search, MessageSquare, Sparkles, Tag, Plus, Upload, Download, Loader2, AlertCircle, CheckCircle2, X, Edit3, Image as ImageIcon } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Character } from '../../types';
 
@@ -11,16 +11,36 @@ const GENRE_TAGS = [
   'Mystery',
   'Magic',
   'Detective',
+  'Anime',
+  'Action',
+  'Adventure',
+];
+
+const AVAILABLE_PILL_TAGS = [
+  'Fantasy',
+  'Sci-Fi',
+  'Cyberpunk',
+  'Mystery',
+  'Magic',
+  'Anime',
+  'Action',
+  'Adventure',
+  'Lore Heavy',
+  'Custom',
 ];
 
 export const CharacterGallery: React.FC = () => {
-  const { characters, createNewChat, importCharacterPng, exportCharacterPng } = useChatStore();
+  const { characters, createNewChat, importCharacterPng, exportCharacterPng, updateCharacter } = useChatStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [importedCharPreview, setImportedCharPreview] = useState<Character | null>(null);
+  
+  // In-modal draft customizer state
+  const [editingChar, setEditingChar] = useState<Character | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter characters based on search query and selected genre tags
@@ -44,10 +64,13 @@ export const CharacterGallery: React.FC = () => {
   };
 
   const handleFileProcess = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.png')) {
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
+    const hasValidExt = allowed.some((ext) => file.name.toLowerCase().endsWith(ext));
+
+    if (!hasValidExt) {
       setImportStatus({
         type: 'error',
-        message: 'Please upload a valid .png character card image.',
+        message: 'Please upload an image (.png, .jpg, .jpeg, or .webp).',
       });
       return;
     }
@@ -57,14 +80,14 @@ export const CharacterGallery: React.FC = () => {
       setImportStatus(null);
       const newChar = await importCharacterPng(file);
       setIsImporting(false);
-      setImportedCharPreview(newChar);
+      setEditingChar(newChar);
       setImportStatus({
         type: 'success',
-        message: `Successfully imported "${newChar.name}"!`,
+        message: `Imported "${newChar.name}"!`,
       });
     } catch (err: unknown) {
       setIsImporting(false);
-      const msg = err instanceof Error ? err.message : 'Failed to import character PNG';
+      const msg = err instanceof Error ? err.message : 'Failed to process image';
       setImportStatus({
         type: 'error',
         message: msg,
@@ -98,7 +121,6 @@ export const CharacterGallery: React.FC = () => {
       const file = files[0];
       if (file) await handleFileProcess(file);
     }
-    // Reset file input value so same file can be selected again if desired
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -108,6 +130,38 @@ export const CharacterGallery: React.FC = () => {
       await exportCharacterPng(charId);
     } catch {
       // Ignore export error
+    }
+  };
+
+  const handleToggleTag = (tagToToggle: string) => {
+    if (!editingChar) return;
+    const currentTags = editingChar.tags || [];
+    const exists = currentTags.includes(tagToToggle);
+    const updatedTags = exists
+      ? currentTags.filter((t) => t !== tagToToggle)
+      : [...currentTags, tagToToggle];
+    setEditingChar({ ...editingChar, tags: updatedTags });
+  };
+
+  const handleSaveAndStart = async () => {
+    if (!editingChar) return;
+    setIsSavingEdit(true);
+    try {
+      await updateCharacter(editingChar.id, {
+        name: editingChar.name,
+        tagline: editingChar.tagline,
+        description: editingChar.description,
+        personality: editingChar.personality,
+        scenario: editingChar.scenario,
+        first_mes: editingChar.first_mes,
+        tags: editingChar.tags,
+      });
+      const charId = editingChar.id;
+      setEditingChar(null);
+      setIsSavingEdit(false);
+      handleStartChat(charId);
+    } catch {
+      setIsSavingEdit(false);
     }
   };
 
@@ -122,7 +176,7 @@ export const CharacterGallery: React.FC = () => {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".png,image/png"
+        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
         className="hidden"
         onChange={handleFileInputChange}
       />
@@ -137,7 +191,7 @@ export const CharacterGallery: React.FC = () => {
             </h1>
           </div>
           <p className="text-sm text-zinc-400">
-            Choose an AI companion or import community TavernAI V2 character cards
+            Choose a companion or drag & drop any image / TavernAI V2 card to import
           </p>
         </div>
 
@@ -154,7 +208,7 @@ export const CharacterGallery: React.FC = () => {
             ) : (
               <Upload className="w-4 h-4 text-indigo-400" />
             )}
-            <span>{isImporting ? 'Parsing PNG...' : 'Import TavernAI Card'}</span>
+            <span>{isImporting ? 'Processing Image...' : 'Import Image / Card'}</span>
           </button>
           <button
             type="button"
@@ -182,10 +236,10 @@ export const CharacterGallery: React.FC = () => {
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white">
-                Drag & drop any TavernAI V2 / Character.AI .png Card
+                Drag & drop any TavernAI Card or Image (.png, .jpg, .webp)
               </h4>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Automatically extracts metadata, character backstory, opening greeting, and embedded avatar.
+                Automatically parses TavernAI metadata or creates a customizable character draft.
               </p>
             </div>
           </div>
@@ -285,15 +339,28 @@ export const CharacterGallery: React.FC = () => {
                     </span>
                   )}
 
-                  {/* Quick Export PNG Button */}
-                  <button
-                    type="button"
-                    title="Export as TavernAI V2 PNG Card"
-                    onClick={(e) => handleExport(e, character.id)}
-                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all opacity-0 group-hover:opacity-100"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Card Action Buttons on Image */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      title="Edit Character Lore"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingChar(character);
+                      }}
+                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Export as TavernAI V2 PNG Card"
+                      onClick={(e) => handleExport(e, character.id)}
+                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Card Body */}
@@ -347,71 +414,155 @@ export const CharacterGallery: React.FC = () => {
         )}
       </div>
 
-      {/* Imported Card Detail Preview Modal */}
-      {importedCharPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-[#18181b] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      {/* Interactive Card Customizer / Preview Modal */}
+      {editingChar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#18181b] border border-[#27272a] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Character Card Imported!</h3>
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">
+                  {editingChar.creator.includes('No Metadata')
+                    ? 'Customize New Character'
+                    : 'Character Card Details'}
+                </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setImportedCharPreview(null)}
+                onClick={() => setEditingChar(null)}
                 className="text-zinc-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex items-center gap-4">
+            {/* Metadata Source Alert Banner */}
+            {editingChar.creator.includes('No Metadata') ? (
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-300 text-xs leading-relaxed">
+                <ImageIcon className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                <div>
+                  <p className="font-semibold text-amber-200">Standard Image (No Embedded Lore)</p>
+                  <p className="text-amber-300/80">
+                    This image has no embedded TavernAI card metadata. Customize {editingChar.name}&apos;s backstory, personality, and greeting below:
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>Rich TavernAI V2 Card metadata successfully extracted!</span>
+              </div>
+            )}
+
+            {/* Avatar & Name / Tagline Inputs */}
+            <div className="flex items-start gap-4">
               <img
-                src={importedCharPreview.avatar_url}
-                alt={importedCharPreview.name}
-                className="w-16 h-16 rounded-xl object-cover border border-[#2e2e36]"
+                src={editingChar.avatar_url}
+                alt={editingChar.name}
+                className="w-20 h-20 rounded-2xl object-cover border border-[#2e2e36] shrink-0"
               />
-              <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-white text-base truncate">{importedCharPreview.name}</h4>
-                <p className="text-xs text-zinc-400 line-clamp-2 mt-0.5">{importedCharPreview.tagline}</p>
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {importedCharPreview.tags.map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded text-[10px] bg-[#27272a] text-zinc-300">
-                      {t}
-                    </span>
-                  ))}
+              <div className="flex-1 space-y-2.5 min-w-0">
+                <div>
+                  <label className="text-[11px] font-semibold text-zinc-400 block mb-1">
+                    Character Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editingChar.name}
+                    onChange={(e) => setEditingChar({ ...editingChar, name: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-lg bg-[#121214] border border-[#27272a] focus:border-indigo-500 text-sm text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-zinc-400 block mb-1">
+                    Tagline / One-line Summary
+                  </label>
+                  <input
+                    type="text"
+                    value={editingChar.tagline}
+                    onChange={(e) => setEditingChar({ ...editingChar, tagline: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-lg bg-[#121214] border border-[#27272a] focus:border-indigo-500 text-xs text-zinc-200 outline-none"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                First Greeting Preview
+            {/* Genre Tags Selector */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-zinc-400 block">
+                Genre Tags (Click to toggle)
               </label>
-              <div className="p-3 rounded-xl bg-[#121214] border border-[#27272a] text-xs text-zinc-300 italic max-h-32 overflow-y-auto leading-relaxed">
-                &ldquo;{importedCharPreview.first_mes || 'No initial greeting provided.'}&rdquo;
+              <div className="flex flex-wrap gap-1.5">
+                {AVAILABLE_PILL_TAGS.map((tag) => {
+                  const isSelected = editingChar.tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleToggleTag(tag)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-[#1e1e22] text-zinc-400 hover:text-zinc-200 border border-[#27272a]'
+                      }`}
+                    >
+                      {isSelected ? `✓ ${tag}` : `+ ${tag}`}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Personality & Backstory */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-zinc-400 block">
+                Personality & Attributes
+              </label>
+              <textarea
+                rows={2}
+                value={editingChar.personality}
+                onChange={(e) => setEditingChar({ ...editingChar, personality: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-[#121214] border border-[#27272a] focus:border-indigo-500 text-xs text-zinc-200 outline-none leading-relaxed"
+                placeholder="Character's personality traits, quirks, and mannerisms..."
+              />
+            </div>
+
+            {/* First Greeting (Opening Message) */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-zinc-400 block">
+                First Opening Greeting (*action* &quot;dialogue&quot;)
+              </label>
+              <textarea
+                rows={3}
+                value={editingChar.first_mes}
+                onChange={(e) => setEditingChar({ ...editingChar, first_mes: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-[#121214] border border-[#27272a] focus:border-indigo-500 text-xs text-zinc-200 italic outline-none leading-relaxed"
+                placeholder="Opening message the AI will send when starting a new chat..."
+              />
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#27272a]">
               <button
                 type="button"
-                onClick={() => setImportedCharPreview(null)}
+                onClick={() => setEditingChar(null)}
                 className="px-4 py-2 rounded-xl bg-[#27272a] hover:bg-[#3f3f46] text-xs font-semibold text-zinc-300 transition-colors"
               >
-                Close
+                Cancel
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const id = importedCharPreview.id;
-                  setImportedCharPreview(null);
-                  handleStartChat(id);
-                }}
-                className="px-4 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md flex items-center gap-1.5"
+                disabled={isSavingEdit}
+                onClick={handleSaveAndStart}
+                className="px-5 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
               >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Start Roleplay Now</span>
+                {isSavingEdit ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <MessageSquare className="w-3.5 h-3.5" />
+                )}
+                <span>Save & Start Roleplay</span>
               </button>
             </div>
           </div>
