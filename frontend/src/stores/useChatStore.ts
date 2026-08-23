@@ -144,6 +144,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       active_index: 0,
       swipes: [text.trim()],
       created_at: new Date().toISOString(),
+      persona_id: get().activePersonaId,
     };
 
     const assistantTurnPlaceholder: MessageTurn = {
