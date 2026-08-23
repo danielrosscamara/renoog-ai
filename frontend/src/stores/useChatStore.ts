@@ -31,6 +31,8 @@ export interface ChatState {
   addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
+  importCharacterPng: (file: File) => Promise<Character>;
+  exportCharacterPng: (characterId: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -286,40 +288,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       onToken: (token: string) => {
         set((state) => {
           const currentTurns = state.messageTurns[chatId] || [];
-          const updated = currentTurns.map((t) => {
-            if (t.id === turnId) {
-              const currentSwipes = [...t.swipes];
+          const updatedTurns = currentTurns.map((turn) => {
+            if (turn.id === turnId) {
+              const currentSwipes = [...turn.swipes];
               currentSwipes[newSwipeIndex] = (currentSwipes[newSwipeIndex] || '') + token;
               return {
-                ...t,
+                ...turn,
                 swipes: currentSwipes,
               };
             }
-            return t;
+            return turn;
           });
           return {
-            messageTurns: { ...state.messageTurns, [chatId]: updated },
+            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
           };
         });
       },
       onDone: (_savedTurnId: string, fullText: string) => {
         set((state) => {
           const currentTurns = state.messageTurns[chatId] || [];
-          const updated = currentTurns.map((t) => {
-            if (t.id === turnId) {
-              const currentSwipes = [...t.swipes];
+          const updatedTurns = currentTurns.map((turn) => {
+            if (turn.id === turnId) {
+              const currentSwipes = [...turn.swipes];
               currentSwipes[newSwipeIndex] = fullText;
               return {
-                ...t,
+                ...turn,
                 swipes: currentSwipes,
                 active_index: newSwipeIndex,
               };
             }
-            return t;
+            return turn;
           });
           return {
             isStreaming: false,
-            messageTurns: { ...state.messageTurns, [chatId]: updated },
+            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
           };
         });
       },
@@ -412,6 +414,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch {
       // Retain deletion
     }
+  },
+
+  importCharacterPng: async (file: File) => {
+    const newChar = await api.importCharacterFromPng(file);
+    set((state) => ({
+      characters: [newChar, ...state.characters],
+      activeCharacterId: newChar.id,
+    }));
+    return newChar;
+  },
+
+  exportCharacterPng: async (characterId: string) => {
+    const character = get().characters.find((c) => c.id === characterId);
+    if (!character) return;
+    await api.exportCharacterToPng(characterId, character.name);
   },
 }));
 
