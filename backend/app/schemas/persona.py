@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class PersonaBase(BaseModel):
     name: str = Field(..., max_length=100, description="User persona name")
     description: str | None = Field(None, description="User backstory, appearance, and personality")
-    avatar_url: str | None = Field(None, max_length=500, description="Avatar image URL")
+    avatar_url: str | None = Field(None, description="Avatar image URL or Base64 Data URI")
     is_default: bool = Field(default=False, description="Default active persona flag")
 
 class PersonaCreate(PersonaBase):
