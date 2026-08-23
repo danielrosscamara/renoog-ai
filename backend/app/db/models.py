@@ -31,7 +31,7 @@ class CharacterModel(Base):
     scenario = Column(Text, nullable=True)
     first_mes = Column(Text, nullable=False)
     mes_example = Column(Text, nullable=True)
-    avatar_url = Column(String(500), nullable=True)
+    avatar_url = Column(Text, nullable=True)
     tags = Column(JSON, default=list)
     is_favorite = Column(Boolean, default=False)
     creator = Column(String(100), default="Renoog Team")
@@ -50,7 +50,7 @@ class PersonaModel(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    avatar_url = Column(String(500), nullable=True)
+    avatar_url = Column(Text, nullable=True)
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 
