@@ -9,7 +9,7 @@ class CharacterBase(BaseModel):
     scenario: str | None = Field(None, description="Current roleplay setting & environment")
     first_mes: str = Field(..., description="First greeting message")
     mes_example: str | None = Field(None, description="Example dialogues")
-    avatar_url: str | None = Field(None, max_length=500, description="Image URL or local asset path")
+    avatar_url: str | None = Field(None, description="Image URL or Base64 Data URI")
     tags: list[str] = Field(default_factory=list, description="Genre tags (Fantasy, Cyberpunk, etc.)")
     is_favorite: bool = Field(default=False)
     creator: str = Field(default="Renoog Team")
