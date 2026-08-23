@@ -10,6 +10,16 @@ export const api = {
     return res.json();
   },
 
+  async updateCharacter(id: string, updates: Partial<Character>): Promise<Character> {
+    const res = await fetch(`${API_BASE_URL}/characters/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update character');
+    return res.json();
+  },
+
   // Personas
   async getPersonas(): Promise<Persona[]> {
     const res = await fetch(`${API_BASE_URL}/personas`);
