@@ -4,8 +4,11 @@ const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 export const api = {
   // Characters
-  async getCharacters(): Promise<Character[]> {
-    const res = await fetch(`${API_BASE_URL}/characters`);
+  async getCharacters(includeHidden = false): Promise<Character[]> {
+    const url = includeHidden
+      ? `${API_BASE_URL}/characters?include_hidden=true`
+      : `${API_BASE_URL}/characters`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Failed to fetch characters');
     return res.json();
   },
@@ -18,6 +21,21 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to update character');
     return res.json();
+  },
+
+  async toggleCharacterVisibility(characterId: string): Promise<Character> {
+    const res = await fetch(`${API_BASE_URL}/characters/${characterId}/visibility`, {
+      method: 'PATCH',
+    });
+    if (!res.ok) throw new Error('Failed to toggle character visibility');
+    return res.json();
+  },
+
+  async deleteCharacter(characterId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/characters/${characterId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete character');
   },
 
   // Personas
