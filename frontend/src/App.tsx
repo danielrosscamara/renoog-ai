@@ -8,7 +8,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
-import { Brain, AlertCircle, X, ChevronDown, Check, Bot } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -25,6 +25,10 @@ export const App: React.FC = () => {
     rerollMessage,
     sendMessage,
     setActiveView,
+    editTurnMessage,
+    deleteTurn,
+    togglePinTurn,
+    retryLastMessage,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -210,6 +214,15 @@ export const App: React.FC = () => {
                     onReroll={(turnId) => {
                       if (activeChatId) rerollMessage(activeChatId, turnId);
                     }}
+                    onEdit={(turnId, newText) => {
+                      if (activeChatId) editTurnMessage(activeChatId, turnId, newText);
+                    }}
+                    onPin={(turnId) => {
+                      if (activeChatId) togglePinTurn(activeChatId, turnId);
+                    }}
+                    onDelete={(turnId) => {
+                      if (activeChatId) deleteTurn(activeChatId, turnId);
+                    }}
                   />
                 );
               })}
@@ -224,6 +237,18 @@ export const App: React.FC = () => {
                   <span className="truncate">{streamingError}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {/* 1-Click Retry Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeChatId) retryLastMessage(activeChatId);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition-colors flex items-center gap-1 shadow-sm"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Retry</span>
+                  </button>
+
                   {streamingError.toLowerCase().includes('key') && (
                     <button
                       type="button"
