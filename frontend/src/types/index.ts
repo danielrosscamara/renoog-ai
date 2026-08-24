@@ -32,6 +32,7 @@ export interface MessageTurn {
   created_at: string;
   persona_id?: string;
   model_name?: string;
+  is_pinned?: boolean;
 }
 
 export interface Chat {
