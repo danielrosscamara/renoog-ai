@@ -36,6 +36,10 @@ export interface ChatState {
   deleteCharacter: (characterId: string) => Promise<void>;
   importCharacterPng: (file: File) => Promise<Character>;
   exportCharacterPng: (characterId: string) => Promise<void>;
+  editTurnMessage: (chatId: string, turnId: string, newText: string) => Promise<void>;
+  deleteTurn: (chatId: string, turnId: string) => Promise<void>;
+  togglePinTurn: (chatId: string, turnId: string) => Promise<void>;
+  retryLastMessage: (chatId: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -497,6 +501,99 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const character = get().characters.find((c) => c.id === characterId);
     if (!character) return;
     await api.exportCharacterToPng(characterId, character.name);
+  },
+
+  editTurnMessage: async (chatId: string, turnId: string, newText: string) => {
+    const currentTurns = get().messageTurns[chatId] || [];
+    const targetTurn = currentTurns.find((t) => t.id === turnId);
+    if (!targetTurn) return;
+
+    const activeIdx = targetTurn.active_index || 0;
+    const updatedSwipes = [...targetTurn.swipes];
+    updatedSwipes[activeIdx] = newText;
+
+    set((state) => ({
+      messageTurns: {
+        ...state.messageTurns,
+        [chatId]: (state.messageTurns[chatId] || []).map((t) =>
+          t.id === turnId ? { ...t, swipes: updatedSwipes } : t
+        ),
+      },
+    }));
+
+    try {
+      await api.updateMessageTurn(chatId, turnId, {
+        swipes: updatedSwipes,
+        active_index: activeIdx,
+      });
+    } catch {
+      // retain optimistic update
+    }
+  },
+
+  deleteTurn: async (chatId: string, turnId: string) => {
+    set((state) => ({
+      messageTurns: {
+        ...state.messageTurns,
+        [chatId]: (state.messageTurns[chatId] || []).filter((t) => t.id !== turnId),
+      },
+    }));
+
+    try {
+      await api.deleteMessageTurn(chatId, turnId);
+    } catch {
+      // retain deletion
+    }
+  },
+
+  togglePinTurn: async (chatId: string, turnId: string) => {
+    const currentTurns = get().messageTurns[chatId] || [];
+    const targetTurn = currentTurns.find((t) => t.id === turnId);
+    if (!targetTurn) return;
+
+    const newPinned = !targetTurn.is_pinned;
+
+    set((state) => ({
+      messageTurns: {
+        ...state.messageTurns,
+        [chatId]: (state.messageTurns[chatId] || []).map((t) =>
+          t.id === turnId ? { ...t, is_pinned: newPinned } : t
+        ),
+      },
+    }));
+
+    try {
+      await api.updateMessageTurn(chatId, turnId, { is_pinned: newPinned });
+    } catch {
+      // retain optimistic update
+    }
+  },
+
+  retryLastMessage: async (chatId: string) => {
+    const turns = get().messageTurns[chatId] || [];
+    if (turns.length === 0 || get().isStreaming) return;
+
+    // Find last user turn
+    const lastUserTurn = [...turns].reverse().find((t) => t.role === 'user');
+    if (!lastUserTurn) return;
+
+    const userPrompt = lastUserTurn.swipes[lastUserTurn.active_index] || '';
+
+    // Remove any failed or empty assistant turns at the end
+    const lastTurn = turns[turns.length - 1];
+    if (lastTurn && lastTurn.role === 'assistant' && (!lastTurn.swipes[0] || lastTurn.swipes[0].trim() === '')) {
+      set((state) => ({
+        streamingError: null,
+        messageTurns: {
+          ...state.messageTurns,
+          [chatId]: (state.messageTurns[chatId] || []).filter((t) => t.id !== lastTurn.id),
+        },
+      }));
+    } else {
+      set({ streamingError: null });
+    }
+
+    await get().sendMessage(chatId, userPrompt);
   },
 }));
 
