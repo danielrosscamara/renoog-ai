@@ -36,3 +36,7 @@ async def init_db():
             await conn.execute(text("ALTER TABLE message_turns ADD COLUMN model_name VARCHAR(100)"))
         except Exception:
             pass
+        try:
+            await conn.execute(text("ALTER TABLE message_turns ADD COLUMN is_pinned BOOLEAN DEFAULT 0"))
+        except Exception:
+            pass
