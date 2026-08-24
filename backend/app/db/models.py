@@ -95,6 +95,7 @@ class MessageTurnModel(Base):
     active_index = Column(Integer, default=0)
     swipes = Column(JSON, default=list)  # Array of alternative text responses
     model_name = Column(String(100), nullable=True)  # Model that authored this turn
+    is_pinned = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 
     chat = relationship("ChatModel", back_populates="turns")
