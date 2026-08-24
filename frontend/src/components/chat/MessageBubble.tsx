@@ -168,17 +168,14 @@ export interface MessageBubbleProps {
   turn: MessageTurn;
   character?: Character;
   persona?: Persona;
-  modelName?: string;
   onSwipeChange: (turnId: string, newIndex: number) => void;
   onReroll: (turnId: string) => void;
 }
 
-const formatModelBadge = (turnModel?: string, fallbackModel?: string) => {
+const formatModelBadge = (turnModel?: string) => {
   if (turnModel) {
-    return turnModel.split('/')[1] || turnModel;
-  }
-  if (fallbackModel) {
-    return fallbackModel.split('/')[1] || fallbackModel;
+    const cleanName = turnModel.split('/')[1] || turnModel;
+    return cleanName.replace(':free', ' (Free)');
   }
   return 'Character Card';
 };
@@ -187,7 +184,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   turn,
   character,
   persona,
-  modelName,
   onSwipeChange,
   onReroll,
 }) => {
@@ -247,7 +243,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               ? 'text-indigo-300 bg-indigo-500/10 border border-indigo-500/20'
               : 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/20'
           }`}>
-            {isAssistant ? formatModelBadge(turn.model_name, modelName) : 'YOU'}
+            {isAssistant ? formatModelBadge(turn.model_name) : 'YOU'}
           </span>
           {subtitle && isAssistant && (
             <span className="text-[11px] text-zinc-500 truncate max-w-48">
