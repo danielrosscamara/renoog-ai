@@ -8,7 +8,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
-import { Brain, AlertCircle, X } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -28,6 +28,7 @@ export const App: React.FC = () => {
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -38,6 +39,25 @@ export const App: React.FC = () => {
   const activeModel =
     localStorage.getItem('renoog_model') || currentChat?.model_name || 'anthropic/claude-3.5-sonnet';
   const displayModelName = activeModel.split('/')[1] || activeModel;
+
+  // Available models list for quick switcher (presets + user custom models)
+  const defaultPresets = [
+    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
+    { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (Free)' },
+    { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1' },
+    { id: 'mistralai/mistral-large-2407', name: 'Mistral Large' },
+  ];
+
+  let customPresets: Array<{ id: string; name: string }> = [];
+  try {
+    const raw = localStorage.getItem('renoog_custom_models');
+    if (raw) customPresets = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+
+  const allModels = [...defaultPresets, ...customPresets.filter((c) => !defaultPresets.some((p) => p.id === c.id))];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,9 +92,56 @@ export const App: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="font-bold text-base text-white">{currentChar.name}</h2>
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 truncate max-w-xs">
-                      {displayModelName}
-                    </span>
+
+                    {/* Quick Model Selector Dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                        className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 transition-all cursor-pointer truncate max-w-xs"
+                      >
+                        <Bot className="w-3 h-3 text-indigo-400 shrink-0" />
+                        <span className="truncate">{displayModelName}</span>
+                        <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                      </button>
+
+                      {isModelDropdownOpen && (
+                        <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#1c1c20] border border-[#2e2e36] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="text-[10px] font-bold text-zinc-400 px-2 py-1 uppercase tracking-wider">
+                            Active Model Switcher
+                          </div>
+                          <div className="max-h-60 overflow-y-auto space-y-1 mt-1">
+                            {allModels.map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  localStorage.setItem('renoog_model', m.id);
+                                  if (activeChatId) {
+                                    useChatStore.setState((state) => ({
+                                      chats: state.chats.map((c) =>
+                                        c.id === activeChatId ? { ...c, model_name: m.id } : c
+                                      ),
+                                    }));
+                                  }
+                                  setIsModelDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                                  activeModel === m.id
+                                    ? 'bg-indigo-600/20 text-indigo-200 font-semibold'
+                                    : 'hover:bg-[#27272a] text-zinc-300'
+                                }`}
+                              >
+                                <span className="truncate">{m.name || m.id}</span>
+                                {activeModel === m.id && (
+                                  <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-zinc-400 truncate max-w-md">{currentChar.tagline}</p>
                 </div>
