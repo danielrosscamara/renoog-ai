@@ -91,6 +91,7 @@ async def stream_openrouter_generator(
                 role="assistant",
                 active_index=0,
                 swipes=[full_response_text.strip()],
+                model_name=model_name,
             )
             session.add(assistant_turn)
             await session.commit()
