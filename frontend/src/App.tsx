@@ -34,6 +34,11 @@ export const App: React.FC = () => {
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
   const activeTurns = activeChatId ? messageTurns[activeChatId] || [] : [];
 
+  // Active selected model resolution (syncs with Settings)
+  const activeModel =
+    localStorage.getItem('renoog_model') || currentChat?.model_name || 'anthropic/claude-3.5-sonnet';
+  const displayModelName = activeModel.split('/')[1] || activeModel;
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when a new message is added in chat view
@@ -67,8 +72,8 @@ export const App: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="font-bold text-base text-white">{currentChar.name}</h2>
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                      {currentChat.model_name.split('/')[1] || 'Claude 3.5'}
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 truncate max-w-xs">
+                      {displayModelName}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 truncate max-w-md">{currentChar.tagline}</p>
@@ -97,6 +102,7 @@ export const App: React.FC = () => {
                     turn={turn}
                     character={currentChar}
                     persona={turnPersona}
+                    modelName={activeModel}
                     onSwipeChange={(turnId, newIndex) => {
                       if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
                     }}
