@@ -6,6 +6,7 @@ class MessageTurnBase(BaseModel):
     active_index: int = Field(default=0, ge=0)
     swipes: list[str] = Field(default_factory=list, description="Candidate response variations")
     model_name: str | None = Field(None, description="LLM model that authored this turn")
+    is_pinned: bool = Field(default=False, description="Pinned memory status")
 
 class MessageTurnCreate(MessageTurnBase):
     id: str | None = None
@@ -14,6 +15,8 @@ class MessageTurnCreate(MessageTurnBase):
 class MessageTurnUpdate(BaseModel):
     active_index: int | None = None
     swipes: list[str] | None = None
+    model_name: str | None = None
+    is_pinned: bool | None = None
 
 class MessageTurnRead(MessageTurnBase):
     id: str
