@@ -131,6 +131,27 @@ export const api = {
     return res.json();
   },
 
+  async updateMessageTurn(
+    chatId: string,
+    turnId: string,
+    updates: { swipes?: string[]; active_index?: number; is_pinned?: boolean }
+  ): Promise<MessageTurn> {
+    const res = await fetch(`${API_BASE_URL}/chats/${chatId}/turns/${turnId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update message turn');
+    return res.json();
+  },
+
+  async deleteMessageTurn(chatId: string, turnId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/chats/${chatId}/turns/${turnId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete message turn');
+  },
+
   // Real-time SSE Token Streaming
   async streamChatMessage({
     chatId,
