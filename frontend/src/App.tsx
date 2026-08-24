@@ -60,6 +60,7 @@ export const App: React.FC = () => {
   const allModels = [...defaultPresets, ...customPresets.filter((c) => !defaultPresets.some((p) => p.id === c.id))];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when a new message is added in chat view
   useEffect(() => {
@@ -67,6 +68,21 @@ export const App: React.FC = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [activeTurns.length, activeView]);
+
+  // Close model dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isModelDropdownOpen]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100">
@@ -79,7 +95,7 @@ export const App: React.FC = () => {
         {activeView === 'chat' && currentChat && currentChar && (
           <>
             {/* Chat Header */}
-            <header className="flex items-center justify-between px-6 py-3.5 border-b border-[#27272a] bg-[#18181b]/80 backdrop-blur-md shrink-0">
+            <header className="relative z-40 flex items-center justify-between px-6 py-3.5 border-b border-[#27272a] bg-[#18181b]/95 backdrop-blur-md shrink-0 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <img
@@ -94,23 +110,29 @@ export const App: React.FC = () => {
                     <h2 className="font-bold text-base text-white">{currentChar.name}</h2>
 
                     {/* Quick Model Selector Dropdown */}
-                    <div className="relative">
+                    <div className="relative" ref={modelDropdownRef}>
                       <button
                         type="button"
                         onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                        className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 transition-all cursor-pointer truncate max-w-xs"
+                        className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all cursor-pointer truncate max-w-xs shadow-sm"
                       >
                         <Bot className="w-3 h-3 text-indigo-400 shrink-0" />
                         <span className="truncate">{displayModelName}</span>
-                        <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                        <ChevronDown className="w-3 h-3 opacity-70 shrink-0" />
                       </button>
 
                       {isModelDropdownOpen && (
-                        <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#1c1c20] border border-[#2e2e36] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                          <div className="text-[10px] font-bold text-zinc-400 px-2 py-1 uppercase tracking-wider">
-                            Active Model Switcher
+                        <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl bg-[#18181b] border border-zinc-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.8)] p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="flex items-center justify-between px-2 py-1 mb-1.5 border-b border-zinc-800 pb-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                              Active Model Engine
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
+                              1-Click Switch
+                            </span>
                           </div>
-                          <div className="max-h-60 overflow-y-auto space-y-1 mt-1">
+
+                          <div className="max-h-56 overflow-y-auto space-y-1 pr-1 [scrollbar-width:thin] [scrollbar-color:#3f3f46_transparent]">
                             {allModels.map((m) => (
                               <button
                                 key={m.id}
@@ -126,18 +148,31 @@ export const App: React.FC = () => {
                                   }
                                   setIsModelDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                                className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-colors ${
                                   activeModel === m.id
-                                    ? 'bg-indigo-600/20 text-indigo-200 font-semibold'
+                                    ? 'bg-indigo-600/20 text-indigo-200 font-semibold border border-indigo-500/30'
                                     : 'hover:bg-[#27272a] text-zinc-300'
                                 }`}
                               >
-                                <span className="truncate">{m.name || m.id}</span>
+                                <span className="truncate font-medium">{m.name || m.id}</span>
                                 {activeModel === m.id && (
                                   <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                                 )}
                               </button>
                             ))}
+                          </div>
+
+                          <div className="mt-2 pt-2 border-t border-zinc-800/80">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsModelDropdownOpen(false);
+                                setActiveView('settings');
+                              }}
+                              className="w-full text-center px-2 py-1.5 rounded-xl text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
+                            >
+                              <span>⚙️ Manage Models in Settings</span>
+                            </button>
                           </div>
                         </div>
                       )}
