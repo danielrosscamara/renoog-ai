@@ -173,19 +173,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
-    let storedApiKey = '';
-    let storedModel = '';
-    let storedTemp = 0.9;
-    try {
-      const savedSettings = localStorage.getItem('renoog_app_settings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        storedApiKey = parsed.apiKey || '';
-        storedModel = parsed.selectedModel || '';
-        storedTemp = parsed.temperature ?? 0.9;
-      }
-    } catch {
-      // Use defaults
+    const storedApiKey =
+      localStorage.getItem('renoog_api_key') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
+        } catch {
+          return '';
+        }
+      })();
+
+    const storedModel =
+      localStorage.getItem('renoog_model') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
+        } catch {
+          return '';
+        }
+      })();
+
+    const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
+
+    // Update active chat model in store if model is selected
+    if (storedModel) {
+      set((state) => ({
+        chats: state.chats.map((c) => (c.id === chatId ? { ...c, model_name: storedModel } : c)),
+      }));
     }
 
     await api.streamChatMessage({
@@ -267,20 +281,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
-    let storedApiKey = '';
-    let storedModel = '';
-    let storedTemp = 0.9;
-    try {
-      const savedSettings = localStorage.getItem('renoog_app_settings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        storedApiKey = parsed.apiKey || '';
-        storedModel = parsed.selectedModel || '';
-        storedTemp = parsed.temperature ?? 0.9;
-      }
-    } catch {
-      // Use defaults
-    }
+    const storedApiKey =
+      localStorage.getItem('renoog_api_key') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
+        } catch {
+          return '';
+        }
+      })();
+
+    const storedModel =
+      localStorage.getItem('renoog_model') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
+        } catch {
+          return '';
+        }
+      })();
+
+    const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
 
     await api.streamChatMessage({
       chatId,
