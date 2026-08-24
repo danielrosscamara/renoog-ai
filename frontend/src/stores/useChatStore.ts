@@ -152,27 +152,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       persona_id: get().activePersonaId,
     };
 
-    const assistantTurnPlaceholder: MessageTurn = {
-      id: assistantTurnId,
-      chat_id: chatId,
-      role: 'assistant',
-      active_index: 0,
-      swipes: [''],
-      created_at: new Date().toISOString(),
-    };
-
-    set((state) => {
-      const currentTurns = state.messageTurns[chatId] || [];
-      return {
-        isStreaming: true,
-        streamingError: null,
-        messageTurns: {
-          ...state.messageTurns,
-          [chatId]: [...currentTurns, userTurn, assistantTurnPlaceholder],
-        },
-      };
-    });
-
     const storedApiKey =
       localStorage.getItem('renoog_api_key') ||
       (() => {
@@ -191,9 +170,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
         } catch {
           return '';
         }
-      })();
+      })() || 'anthropic/claude-3.5-sonnet';
 
     const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
+
+    const assistantTurnPlaceholder: MessageTurn = {
+      id: assistantTurnId,
+      chat_id: chatId,
+      role: 'assistant',
+      active_index: 0,
+      swipes: [''],
+      created_at: new Date().toISOString(),
+      model_name: storedModel,
+    };
+
+    set((state) => {
+      const currentTurns = state.messageTurns[chatId] || [];
+      return {
+        isStreaming: true,
+        streamingError: null,
+        messageTurns: {
+          ...state.messageTurns,
+          [chatId]: [...currentTurns, userTurn, assistantTurnPlaceholder],
+        },
+      };
+    });
 
     // Update active chat model in store if model is selected
     if (storedModel) {
@@ -217,6 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               return {
                 ...turn,
                 swipes: [currentSwipe + token],
+                model_name: storedModel,
               };
             }
             return turn;
@@ -235,6 +237,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ...turn,
                 id: savedTurnId,
                 swipes: [fullText],
+                model_name: storedModel,
               };
             }
             return turn;
@@ -339,6 +342,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ...turn,
                 swipes: currentSwipes,
                 active_index: newSwipeIndex,
+                model_name: storedModel,
               };
             }
             return turn;
