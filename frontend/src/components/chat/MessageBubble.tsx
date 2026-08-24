@@ -107,16 +107,17 @@ const SwipeControls: React.FC<SwipeControlsProps> = ({
 };
 
 // ─── Message Action Bar ──────────────────────────────────────────────────────
-// Appears on hover (inspired by screen1.png: [+] [···] [✂️] [📋] [✏️])
+// Appears on hover (inspired by screen1.png: [✏️] [📌] [📋] [🗑️])
 interface ActionBarProps {
   role: 'user' | 'assistant';
+  isPinned?: boolean;
   onEdit: () => void;
   onPin: () => void;
   onCopy: () => void;
   onDelete: () => void;
 }
 
-const ActionBar: React.FC<ActionBarProps> = ({ onEdit, onPin, onCopy, onDelete }) => {
+const ActionBar: React.FC<ActionBarProps> = ({ isPinned, onEdit, onPin, onCopy, onDelete }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -130,13 +131,19 @@ const ActionBar: React.FC<ActionBarProps> = ({ onEdit, onPin, onCopy, onDelete }
       <button
         onClick={onEdit}
         className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-[#3f3f46] transition-colors"
+        title="Edit message (Ctrl+Enter to save)"
         aria-label="Edit message"
       >
         <PenLine className="w-3.5 h-3.5" />
       </button>
       <button
         onClick={onPin}
-        className="p-1.5 rounded-md text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+        className={`p-1.5 rounded-md transition-colors ${
+          isPinned
+            ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20'
+            : 'text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10'
+        }`}
+        title={isPinned ? 'Unpin from memory anchor' : 'Pin to memory anchor'}
         aria-label="Pin message"
       >
         <Pin className="w-3.5 h-3.5" />
@@ -144,6 +151,7 @@ const ActionBar: React.FC<ActionBarProps> = ({ onEdit, onPin, onCopy, onDelete }
       <button
         onClick={handleCopy}
         className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+        title="Copy to clipboard"
         aria-label="Copy message"
       >
         {copied ? (
@@ -155,6 +163,7 @@ const ActionBar: React.FC<ActionBarProps> = ({ onEdit, onPin, onCopy, onDelete }
       <button
         onClick={onDelete}
         className="p-1.5 rounded-md text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        title="Delete message turn"
         aria-label="Delete message"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -170,6 +179,9 @@ export interface MessageBubbleProps {
   persona?: Persona;
   onSwipeChange: (turnId: string, newIndex: number) => void;
   onReroll: (turnId: string) => void;
+  onEdit?: (turnId: string, newText: string) => void;
+  onPin?: (turnId: string) => void;
+  onDelete?: (turnId: string) => void;
 }
 
 const formatModelBadge = (turnModel?: string) => {
@@ -186,11 +198,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   persona,
   onSwipeChange,
   onReroll,
+  onEdit,
+  onPin,
+  onDelete,
 }) => {
   const [hovered, setHovered] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const isAssistant = turn.role === 'assistant';
   const activeContent = turn.swipes[turn.active_index] || turn.swipes[0] || '';
+  const [editText, setEditText] = useState(activeContent);
 
   const avatar = isAssistant ? character?.avatar_url : persona?.avatar_url;
   const name = isAssistant ? character?.name : persona?.name;
@@ -198,6 +215,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const handleCopy = () => {
     navigator.clipboard.writeText(activeContent);
+  };
+
+  const handleSaveEdit = () => {
+    if (onEdit && editText.trim() !== '') {
+      onEdit(turn.id, editText);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditText(activeContent);
+    setIsEditing(false);
   };
 
   const handlePrev = () => {
@@ -245,6 +274,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           }`}>
             {isAssistant ? formatModelBadge(turn.model_name) : 'YOU'}
           </span>
+          {turn.is_pinned && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1">
+              <Pin className="w-2.5 h-2.5" />
+              Pinned Anchor
+            </span>
+          )}
           {subtitle && isAssistant && (
             <span className="text-[11px] text-zinc-500 truncate max-w-48">
               {subtitle}
@@ -252,36 +287,80 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
         </div>
 
-        {/* Prose Body */}
-        <div className={`rounded-2xl p-4 max-w-[85%] ${
-          isAssistant
-            ? 'bg-transparent'
-            : 'bg-[#1e1e22] border border-[#2a2a2e]'
-        }`}>
-          <RoleplayProse content={activeContent} />
-
-          {/* Swipe Controls (Assistant only) */}
-          {isAssistant && (
-            <SwipeControls
-              activeIndex={turn.active_index}
-              totalSwipes={turn.swipes.length}
-              onPrev={handlePrev}
-              onNext={handleNext}
-              onReroll={() => onReroll(turn.id)}
+        {/* Prose Body or Inline Editor */}
+        {isEditing ? (
+          <div className="w-full max-w-2xl bg-[#18181b] border border-indigo-500/40 rounded-2xl p-3 shadow-xl mt-1">
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSaveEdit();
+                }
+              }}
+              rows={4}
+              className="w-full bg-[#121214] text-zinc-100 p-2.5 rounded-xl border border-zinc-700/60 focus:border-indigo-500 focus:outline-none text-sm font-sans resize-y leading-relaxed"
+              placeholder="Edit message turn..."
+              autoFocus
             />
-          )}
-        </div>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800">
+              <span className="text-[11px] text-zinc-500">
+                Press <kbd className="px-1 py-0.5 bg-zinc-800 rounded text-zinc-400 text-[10px]">Ctrl+Enter</kbd> to save
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-2.5 py-1 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="px-3 py-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-sm"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={`rounded-2xl p-4 max-w-[85%] ${
+            isAssistant
+              ? 'bg-transparent'
+              : 'bg-[#1e1e22] border border-[#2a2a2e]'
+          }`}>
+            <RoleplayProse content={activeContent} />
+
+            {/* Swipe Controls (Assistant only) */}
+            {isAssistant && (
+              <SwipeControls
+                activeIndex={turn.active_index}
+                totalSwipes={turn.swipes.length}
+                onPrev={handlePrev}
+                onNext={handleNext}
+                onReroll={() => onReroll(turn.id)}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Hover Action Bar */}
-      {hovered && (
+      {hovered && !isEditing && (
         <div className={`absolute top-2 ${isAssistant ? 'right-4' : 'left-4'} z-10`}>
           <ActionBar
             role={turn.role}
-            onEdit={() => {}}
-            onPin={() => {}}
+            isPinned={turn.is_pinned}
+            onEdit={() => {
+              setEditText(activeContent);
+              setIsEditing(true);
+            }}
+            onPin={() => onPin?.(turn.id)}
             onCopy={handleCopy}
-            onDelete={() => {}}
+            onDelete={() => onDelete?.(turn.id)}
           />
         </div>
       )}
