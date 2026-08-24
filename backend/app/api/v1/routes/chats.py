@@ -113,7 +113,52 @@ async def update_turn_swipe(
 
     await db.commit()
     await db.refresh(turn)
+@router.put("/{chat_id}/turns/{turn_id}", response_model=MessageTurnRead)
+async def update_turn(
+    chat_id: str,
+    turn_id: str,
+    data: MessageTurnUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Edit message content, active swipe index, or pin status."""
+    stmt = select(MessageTurnModel).where(
+        MessageTurnModel.id == turn_id,
+        MessageTurnModel.chat_id == chat_id
+    )
+    turn = (await db.execute(stmt)).scalar_one_or_none()
+    if not turn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Message turn '{turn_id}' not found in chat '{chat_id}'."
+        )
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(turn, field, value)
+
+    await db.commit()
+    await db.refresh(turn)
     return turn
+
+@router.delete("/{chat_id}/turns/{turn_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_turn(
+    chat_id: str,
+    turn_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a single message turn from a chat."""
+    stmt = select(MessageTurnModel).where(
+        MessageTurnModel.id == turn_id,
+        MessageTurnModel.chat_id == chat_id
+    )
+    turn = (await db.execute(stmt)).scalar_one_or_none()
+    if not turn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Message turn '{turn_id}' not found in chat '{chat_id}'."
+        )
+
+    await db.delete(turn)
+    await db.commit()
 
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
