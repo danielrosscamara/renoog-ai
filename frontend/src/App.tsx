@@ -132,7 +132,7 @@ export const App: React.FC = () => {
                             </span>
                           </div>
 
-                          <div className="max-h-56 overflow-y-auto space-y-1 pr-1 [scrollbar-width:thin] [scrollbar-color:#3f3f46_transparent]">
+                          <div className="max-h-56 overflow-y-auto space-y-1 pr-1 [scrollbar-thin] [scrollbar-color:#3f3f46_transparent]">
                             {allModels.map((m) => (
                               <button
                                 key={m.id}
@@ -204,7 +204,6 @@ export const App: React.FC = () => {
                     turn={turn}
                     character={currentChar}
                     persona={turnPersona}
-                    modelName={activeModel}
                     onSwipeChange={(turnId, newIndex) => {
                       if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
                     }}
