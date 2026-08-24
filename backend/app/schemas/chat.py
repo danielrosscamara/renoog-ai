@@ -5,6 +5,7 @@ class MessageTurnBase(BaseModel):
     role: str = Field(..., description="'user' | 'assistant' | 'system'")
     active_index: int = Field(default=0, ge=0)
     swipes: list[str] = Field(default_factory=list, description="Candidate response variations")
+    model_name: str | None = Field(None, description="LLM model that authored this turn")
 
 class MessageTurnCreate(MessageTurnBase):
     id: str | None = None
