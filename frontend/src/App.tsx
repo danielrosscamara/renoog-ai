@@ -8,7 +8,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
-import { Brain } from 'lucide-react';
+import { Brain, AlertCircle, X } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -20,9 +20,11 @@ export const App: React.FC = () => {
     activePersonaId,
     activeView,
     isStreaming,
+    streamingError,
     setSwipeIndex,
     rerollMessage,
     sendMessage,
+    setActiveView,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -106,6 +108,34 @@ export const App: React.FC = () => {
               })}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Streaming Error Alert Banner */}
+            {streamingError && (
+              <div className="md:mx-8 mb-2 max-w-4xl w-full mx-auto p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span className="truncate">{streamingError}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {streamingError.toLowerCase().includes('key') && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('settings')}
+                      className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 font-semibold text-[11px] transition-colors"
+                    >
+                      Open Settings
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => useChatStore.setState({ streamingError: null })}
+                    className="p-1 rounded-md hover:bg-red-500/20 text-red-400 hover:text-red-200 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Bottom Input Cockpit */}
             <ChatInputBar
