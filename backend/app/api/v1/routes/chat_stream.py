@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from pydantic import BaseModel, Field
@@ -11,6 +12,8 @@ from app.core.config import settings
 from app.core.prompt_compiler import compile_prompt_payload
 from app.db.models import CharacterModel, ChatModel, MessageTurnModel, PersonaModel
 from app.db.session import AsyncSessionLocal, get_db
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/chat", tags=["Streaming"])
 
@@ -44,13 +47,23 @@ async def stream_openrouter_generator(
         "stream": True,
     }
 
+    masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else "***"
+    logger.info(f"[STREAM] 🚀 Connecting to OpenRouter URL={openrouter_url} | Model='{model_name}' | Key={masked_key}")
+
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
             async with client.stream("POST", openrouter_url, headers=headers, json=body) as response:
                 if response.status_code != 200:
-                    err_body = await response.aread()
-                    yield json.dumps({"event": "error", "error": f"OpenRouter HTTP {response.status_code}: {err_body.decode('utf-8', errors='ignore')}"})
+                    err_body = (await response.aread()).decode("utf-8", errors="ignore")
+                    logger.error(f"[STREAM] ❌ OpenRouter HTTP {response.status_code} Error: {err_body}")
+                    yield json.dumps({
+                        "event": "error",
+                        "error": f"OpenRouter HTTP {response.status_code}: {err_body}"
+                    })
                     return
+
+                logger.info(f"[STREAM] 🟢 OpenRouter 200 OK. Streaming tokens for chat '{chat_id}'...")
+                token_count = 0
 
                 async for line in response.aiter_lines():
                     if not line:
@@ -63,10 +76,13 @@ async def stream_openrouter_generator(
                             chunk = json.loads(raw_data)
                             delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
                             if delta:
+                                token_count += 1
                                 full_response_text += delta
                                 yield json.dumps({"event": "token", "token": delta})
                         except Exception:
                             continue
+
+                logger.info(f"[STREAM] ✅ Finished stream. Generated {token_count} tokens (~{len(full_response_text)} chars).")
 
         # Save generated assistant response into database
         async with AsyncSessionLocal() as session:
@@ -80,6 +96,7 @@ async def stream_openrouter_generator(
             await session.commit()
             await session.refresh(assistant_turn)
 
+            logger.info(f"[STREAM] 💾 Saved assistant turn '{assistant_turn.id}' to database.")
             yield json.dumps({
                 "event": "done",
                 "turn_id": str(assistant_turn.id),
@@ -87,6 +104,7 @@ async def stream_openrouter_generator(
             })
 
     except Exception as e:
+        logger.error(f"[STREAM] 💥 Exception during streaming: {str(e)}", exc_info=True)
         yield json.dumps({"event": "error", "error": str(e)})
 
 @router.post("/stream")
@@ -98,22 +116,28 @@ async def stream_chat_response(
     """Initiates an SSE token stream for roleplay conversation turns."""
     # Resolve OpenRouter API Key
     api_key = x_openrouter_key or getattr(settings, "OPENROUTER_API_KEY", None)
+
+    logger.info(f"[STREAM] 📨 Incoming stream request for chat_id='{req.chat_id}', message='{req.user_message[:30]}...'")
+
     if not api_key or api_key.startswith("sk-or-v1-xxx"):
+        logger.error("[STREAM] ❌ Rejected: OpenRouter API Key not provided or placeholder!")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="OpenRouter API Key not provided. Please add your key in Settings or headers."
+            detail="OpenRouter API Key not provided. Please paste your key in Settings (⚙️) or headers."
         )
 
     # 1. Fetch Chat & Character
     stmt = select(ChatModel).options(selectinload(ChatModel.turns)).where(ChatModel.id == req.chat_id)
     chat = (await db.execute(stmt)).scalar_one_or_none()
     if not chat:
+        logger.error(f"[STREAM] ❌ Chat '{req.chat_id}' not found in database.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Chat '{req.chat_id}' not found.")
 
     char_id = getattr(chat, "character_id", None)
     char_stmt = select(CharacterModel).where(CharacterModel.id == str(char_id))
     character = (await db.execute(char_stmt)).scalar_one_or_none()
     if not character:
+        logger.error(f"[STREAM] ❌ Character '{char_id}' not found.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found.")
 
     persona = None
@@ -139,6 +163,8 @@ async def stream_chat_response(
 
     target_model = req.model_name or getattr(chat, "model_name", None) or settings.DEFAULT_MODEL
     target_temp = req.temperature if req.temperature is not None else float(getattr(chat, "temperature", 0.90))
+
+    logger.info(f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Target Model='{target_model}' | Temp={target_temp}")
 
     return EventSourceResponse(
         stream_openrouter_generator(
