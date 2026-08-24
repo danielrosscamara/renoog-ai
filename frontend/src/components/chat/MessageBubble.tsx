@@ -173,9 +173,14 @@ export interface MessageBubbleProps {
   onReroll: (turnId: string) => void;
 }
 
-const formatModelBadge = (slug?: string) => {
-  if (!slug) return 'AI';
-  return slug.split('/')[1] || slug;
+const formatModelBadge = (turnModel?: string, fallbackModel?: string) => {
+  if (turnModel) {
+    return turnModel.split('/')[1] || turnModel;
+  }
+  if (fallbackModel) {
+    return fallbackModel.split('/')[1] || fallbackModel;
+  }
+  return 'Character Card';
 };
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -242,7 +247,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               ? 'text-indigo-300 bg-indigo-500/10 border border-indigo-500/20'
               : 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/20'
           }`}>
-            {isAssistant ? formatModelBadge(modelName) : 'YOU'}
+            {isAssistant ? formatModelBadge(turn.model_name, modelName) : 'YOU'}
           </span>
           {subtitle && isAssistant && (
             <span className="text-[11px] text-zinc-500 truncate max-w-48">
