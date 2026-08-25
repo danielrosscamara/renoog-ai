@@ -40,6 +40,8 @@ export interface ChatState {
   deleteTurn: (chatId: string, turnId: string) => Promise<void>;
   togglePinTurn: (chatId: string, turnId: string) => Promise<void>;
   retryLastMessage: (chatId: string) => Promise<void>;
+  rerollUserMessage: (chatId: string, userTurnId: string) => Promise<void>;
+  generateGhostwriterSuggestion: (chatId: string) => Promise<string>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -594,6 +596,95 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     await get().sendMessage(chatId, userPrompt);
+  },
+
+  rerollUserMessage: async (chatId: string, userTurnId: string) => {
+    const turns = get().messageTurns[chatId] || [];
+    const userIndex = turns.findIndex((t) => t.id === userTurnId);
+    if (userIndex === -1 || get().isStreaming) return;
+
+    // Find subsequent assistant turn directly following this user turn
+    const subsequentAssistantTurn = turns.slice(userIndex + 1).find((t) => t.role === 'assistant');
+    if (subsequentAssistantTurn) {
+      await get().rerollMessage(chatId, subsequentAssistantTurn.id);
+    } else {
+      const userPrompt = turns[userIndex].swipes[turns[userIndex].active_index] || '';
+      await get().sendMessage(chatId, userPrompt);
+    }
+  },
+
+  generateGhostwriterSuggestion: async (chatId: string): Promise<string> => {
+    const state = get();
+    const currentChat = state.chats.find((c) => c.id === chatId);
+    const character = state.characters.find((c) => c.id === currentChat?.character_id);
+    const persona = state.personas.find((p) => p.id === state.activePersonaId);
+    const turns = state.messageTurns[chatId] || [];
+
+    const storedApiKey =
+      localStorage.getItem('renoog_api_key') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
+        } catch {
+          return '';
+        }
+      })();
+
+    const storedModel =
+      localStorage.getItem('renoog_model') ||
+      (() => {
+        try {
+          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
+        } catch {
+          return '';
+        }
+      })() || 'anthropic/claude-3.5-sonnet';
+
+    const recentDialogue = turns
+      .slice(-4)
+      .map((t) => {
+        const author = t.role === 'user' ? (persona?.name || 'You') : (character?.name || 'Character');
+        return `${author}: ${t.swipes[t.active_index] || ''}`;
+      })
+      .join('\n');
+
+    if (!storedApiKey) {
+      return `*smiles at ${character?.name || 'them'} and steps forward* "Tell me more about what you have in mind."`;
+    }
+
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${storedApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost:5173',
+          'X-Title': 'Renoog AI Ghostwriter',
+        },
+        body: JSON.stringify({
+          model: storedModel,
+          messages: [
+            {
+              role: 'system',
+              content: `You are ghostwriting for the roleplay persona "${persona?.name || 'Adventurer'}" (${persona?.description || 'A wanderer in the scene'}). Based on the recent dialogue with "${character?.name || 'Character'}", write a single concise immersive response for ${persona?.name || 'the persona'}. Include *actions in asterisks* and spoken dialogue in quotes. Output ONLY the response itself without commentary.`,
+            },
+            {
+              role: 'user',
+              content: `Recent context:\n${recentDialogue}\n\nWrite the next response for ${persona?.name || 'Adventurer'}:`,
+            },
+          ],
+          temperature: 0.85,
+          max_tokens: 120,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to generate ghostwriter suggestion');
+      const data = await res.json();
+      const suggestion = data.choices?.[0]?.message?.content?.trim();
+      return suggestion || `*nods in agreement with ${character?.name || 'them'}* "I understand."`;
+    } catch {
+      return `*glances at ${character?.name || 'them'} with an intrigued expression* "Let's see where this leads."`;
+    }
   },
 }));
 
