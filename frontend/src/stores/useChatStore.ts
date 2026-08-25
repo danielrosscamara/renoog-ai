@@ -45,6 +45,33 @@ export interface ChatState {
   generateGhostwriterSuggestion: (chatId: string) => Promise<string>;
 }
 
+// Helper: Loads advanced generation samplers and stop sequences from localStorage
+const getStoredGenerationSamplers = (activePersonaName?: string) => {
+  const topP = parseFloat(localStorage.getItem('renoog_top_p') || '0.95');
+  const frequencyPenalty = parseFloat(localStorage.getItem('renoog_freq_penalty') || '0.0');
+  const presencePenalty = parseFloat(localStorage.getItem('renoog_pres_penalty') || '0.0');
+  const repetitionPenalty = parseFloat(localStorage.getItem('renoog_rep_penalty') || '1.15');
+  const maxTokens = parseInt(localStorage.getItem('renoog_max_tokens') || '1024', 10);
+  const antiImpersonation = localStorage.getItem('renoog_anti_impersonation') !== 'false';
+
+  const stopSequences: string[] = [];
+  if (antiImpersonation) {
+    stopSequences.push('\nUser:', '\n{{user}}:');
+    if (activePersonaName) {
+      stopSequences.push(`\n${activePersonaName}:`);
+    }
+  }
+
+  return {
+    topP,
+    frequencyPenalty,
+    presencePenalty,
+    repetitionPenalty,
+    maxTokens,
+    stopSequences,
+  };
+};
+
 export const useChatStore = create<ChatState>((set, get) => ({
   characters: MOCK_CHARACTERS,
   personas: MOCK_PERSONAS,
@@ -211,11 +238,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     }
 
+    const activePersona = get().personas.find((p) => p.id === get().activePersonaId);
+    const samplers = getStoredGenerationSamplers(activePersona?.name);
+
     await api.streamChatMessage({
       chatId,
       userMessage: text,
       modelName: storedModel || undefined,
       temperature: storedTemp,
+      topP: samplers.topP,
+      frequencyPenalty: samplers.frequencyPenalty,
+      presencePenalty: samplers.presencePenalty,
+      repetitionPenalty: samplers.repetitionPenalty,
+      maxTokens: samplers.maxTokens,
+      stopSequences: samplers.stopSequences,
       apiKey: storedApiKey || undefined,
       onToken: (token: string) => {
         set((state) => {
@@ -318,11 +354,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
 
+    const activePersona = get().personas.find((p) => p.id === get().activePersonaId);
+    const samplers = getStoredGenerationSamplers(activePersona?.name);
+
     await api.streamChatMessage({
       chatId,
       userMessage: userPrompt,
       modelName: storedModel || undefined,
       temperature: storedTemp,
+      topP: samplers.topP,
+      frequencyPenalty: samplers.frequencyPenalty,
+      presencePenalty: samplers.presencePenalty,
+      repetitionPenalty: samplers.repetitionPenalty,
+      maxTokens: samplers.maxTokens,
+      stopSequences: samplers.stopSequences,
       apiKey: storedApiKey || undefined,
       onToken: (token: string) => {
         set((state) => {
