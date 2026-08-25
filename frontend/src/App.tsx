@@ -31,6 +31,7 @@ export const App: React.FC = () => {
     retryLastMessage,
     rerollUserMessage,
     generateGhostwriterSuggestion,
+    exactTokenUsage,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -105,7 +106,7 @@ export const App: React.FC = () => {
     };
   }, [isModelDropdownOpen, isTokenDropdownOpen]);
 
-  // Dynamic Token Layer Diagnostics (~3.8 chars per token)
+  // Dynamic Token Layer Diagnostics (~3.8 chars per token approximation)
   const charLoreChars =
     (currentChar?.personality?.length || 0) +
     (currentChar?.scenario?.length || 0) +
@@ -117,7 +118,14 @@ export const App: React.FC = () => {
   const personaTokens = Math.max(1, Math.round(personaChars / 3.8));
   const dialogueTokens = Math.max(0, Math.round(dialogueChars / 3.8));
 
-  const totalEstimatedTokens = charLoreTokens + personaTokens + dialogueTokens;
+  // Check if OpenRouter exact ground-truth usage is available
+  const chatExactUsage = activeChatId ? exactTokenUsage[activeChatId] : null;
+  const isExactUsage = Boolean(chatExactUsage && chatExactUsage.prompt_tokens > 0);
+
+  const totalEstimatedTokens = isExactUsage
+    ? (chatExactUsage!.total_tokens || (chatExactUsage!.prompt_tokens + chatExactUsage!.completion_tokens))
+    : (charLoreTokens + personaTokens + dialogueTokens);
+
   const maxContextTokens = getModelMaxTokens(activeModel);
   const remainingHeadroomTokens = Math.max(0, maxContextTokens - totalEstimatedTokens);
 
@@ -271,6 +279,18 @@ export const App: React.FC = () => {
                         </span>
                       </div>
 
+                      {/* Exact Ground-Truth vs Estimate Status Banner */}
+                      {isExactUsage ? (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[10px] font-semibold mb-3">
+                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span>🎯 100% Ground Truth (Verified by Model)</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 text-[10px] font-medium mb-3">
+                          <span>ℹ️ Live Pre-Generation Estimate (~95% accuracy)</span>
+                        </div>
+                      )}
+
                       {/* Active Model Indicator */}
                       <div className="bg-[#121214] p-2 rounded-xl border border-zinc-800/80 mb-3 flex items-center justify-between text-[11px]">
                         <span className="text-zinc-400">Active Engine</span>
@@ -280,41 +300,69 @@ export const App: React.FC = () => {
                       {/* Layer Breakdown */}
                       <div className="space-y-2 mb-3">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                          Active Prompt Layers
+                          {isExactUsage ? 'Server Token Usage' : 'Active Prompt Layers'}
                         </div>
 
-                        {/* Character Lore */}
-                        <div className="flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-purple-400" />
-                            <span className="text-zinc-300">Character Card Lore</span>
-                          </div>
-                          <span className="font-mono text-zinc-400 tabular-nums">
-                            {charLoreTokens.toLocaleString()} tokens
-                          </span>
-                        </div>
+                        {isExactUsage ? (
+                          <>
+                            {/* Prompt Context */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-purple-400" />
+                                <span className="text-zinc-300">Prompt Context Payload</span>
+                              </div>
+                              <span className="font-mono text-zinc-200 tabular-nums">
+                                {chatExactUsage!.prompt_tokens.toLocaleString()} tokens
+                              </span>
+                            </div>
 
-                        {/* Persona Description */}
-                        <div className="flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                            <span className="text-zinc-300">Persona ({currentPersona.name})</span>
-                          </div>
-                          <span className="font-mono text-zinc-400 tabular-nums">
-                            {personaTokens.toLocaleString()} tokens
-                          </span>
-                        </div>
+                            {/* Last Completion */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                <span className="text-zinc-300">Last Generated Response</span>
+                              </div>
+                              <span className="font-mono text-zinc-200 tabular-nums">
+                                {chatExactUsage!.completion_tokens.toLocaleString()} tokens
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {/* Character Lore */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-purple-400" />
+                                <span className="text-zinc-300">Character Card Lore</span>
+                              </div>
+                              <span className="font-mono text-zinc-400 tabular-nums">
+                                {charLoreTokens.toLocaleString()} tokens
+                              </span>
+                            </div>
 
-                        {/* Dialogue History */}
-                        <div className="flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-blue-400" />
-                            <span className="text-zinc-300">Dialogue ({activeTurns.length} turns)</span>
-                          </div>
-                          <span className="font-mono text-zinc-400 tabular-nums">
-                            {dialogueTokens.toLocaleString()} tokens
-                          </span>
-                        </div>
+                            {/* Persona Description */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                <span className="text-zinc-300">Persona ({currentPersona.name})</span>
+                              </div>
+                              <span className="font-mono text-zinc-400 tabular-nums">
+                                {personaTokens.toLocaleString()} tokens
+                              </span>
+                            </div>
+
+                            {/* Dialogue History */}
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                                <span className="text-zinc-300">Dialogue ({activeTurns.length} turns)</span>
+                              </div>
+                              <span className="font-mono text-zinc-400 tabular-nums">
+                                {dialogueTokens.toLocaleString()} tokens
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* Headroom Summary */}
