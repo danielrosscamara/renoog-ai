@@ -64,6 +64,9 @@ async def stream_openrouter_generator(
 
                 logger.info(f"[STREAM] 🟢 OpenRouter 200 OK. Streaming tokens for chat '{chat_id}'...")
                 token_count = 0
+                prompt_tokens = 0
+                completion_tokens = 0
+                total_tokens = 0
 
                 async for line in response.aiter_lines():
                     if not line:
@@ -79,10 +82,17 @@ async def stream_openrouter_generator(
                                 token_count += 1
                                 full_response_text += delta
                                 yield json.dumps({"event": "token", "token": delta})
+
+                            # Capture OpenRouter server-calculated usage statistics
+                            usage = chunk.get("usage")
+                            if usage:
+                                prompt_tokens = usage.get("prompt_tokens", 0)
+                                completion_tokens = usage.get("completion_tokens", 0)
+                                total_tokens = usage.get("total_tokens", 0)
                         except Exception:
                             continue
 
-                logger.info(f"[STREAM] ✅ Finished stream. Generated {token_count} tokens (~{len(full_response_text)} chars).")
+                logger.info(f"[STREAM] ✅ Finished stream. Generated {token_count} tokens (~{len(full_response_text)} chars). Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
 
         # Save generated assistant response into database
         async with AsyncSessionLocal() as session:
@@ -101,7 +111,10 @@ async def stream_openrouter_generator(
             yield json.dumps({
                 "event": "done",
                 "turn_id": str(assistant_turn.id),
-                "full_text": full_response_text.strip()
+                "full_text": full_response_text.strip(),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens or (prompt_tokens + completion_tokens),
             })
 
     except Exception as e:
