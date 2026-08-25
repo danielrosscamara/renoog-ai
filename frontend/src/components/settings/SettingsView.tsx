@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Key,
@@ -18,7 +18,10 @@ import {
   X,
   Radio,
   ShieldCheck,
+  AlertTriangle,
+  ArrowRight,
 } from 'lucide-react';
+import { useChatStore } from '../../stores/useChatStore';
 
 interface ModelOption {
   id: string;
@@ -142,6 +145,8 @@ const DEFAULT_PRESET_MODELS: ModelOption[] = [
 ];
 
 export const SettingsView: React.FC = () => {
+  const { pendingView, setPendingView, setHasUnsavedSettings, proceedNavigation } = useChatStore();
+
   // Settings state with localStorage fallback
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('renoog_api_key') || '');
   const [showKey, setShowKey] = useState(false);
@@ -182,6 +187,108 @@ export const SettingsView: React.FC = () => {
     () => localStorage.getItem('renoog_anti_impersonation') !== 'false'
   );
   const [activePreset, setActivePreset] = useState<string>('immersive');
+
+  // Baseline of saved settings to detect unsaved changes
+  const [baseline, setBaseline] = useState(() => ({
+    apiKey: (localStorage.getItem('renoog_api_key') || '').trim(),
+    selectedModel: localStorage.getItem('renoog_model') || 'anthropic/claude-3.5-sonnet',
+    temperature: parseFloat(localStorage.getItem('renoog_temp') || '0.90'),
+    topP: parseFloat(localStorage.getItem('renoog_top_p') || '0.95'),
+    repetitionPenalty: parseFloat(localStorage.getItem('renoog_rep_penalty') || '1.15'),
+    frequencyPenalty: parseFloat(localStorage.getItem('renoog_freq_penalty') || '0.00'),
+    presencePenalty: parseFloat(localStorage.getItem('renoog_pres_penalty') || '0.00'),
+    maxTokens: parseInt(localStorage.getItem('renoog_max_tokens') || '1024', 10),
+    antiImpersonation: localStorage.getItem('renoog_anti_impersonation') !== 'false',
+  }));
+
+  const allModels = [...DEFAULT_PRESET_MODELS, ...customModels];
+  const getModelDisplayName = (id: string) => allModels.find((m) => m.id === id)?.name || id;
+
+  // Real-time diff calculation
+  const diffs: Array<{ field: string; label: string; from: string; to: string }> = [];
+
+  if (apiKey.trim() !== baseline.apiKey) {
+    diffs.push({
+      field: 'apiKey',
+      label: 'OpenRouter API Key',
+      from: baseline.apiKey ? `${baseline.apiKey.slice(0, 6)}...` : 'None',
+      to: apiKey.trim() ? `${apiKey.trim().slice(0, 6)}...` : 'None',
+    });
+  }
+  if (selectedModel !== baseline.selectedModel) {
+    diffs.push({
+      field: 'selectedModel',
+      label: 'Model Engine',
+      from: getModelDisplayName(baseline.selectedModel),
+      to: getModelDisplayName(selectedModel),
+    });
+  }
+  if (temperature !== baseline.temperature) {
+    diffs.push({
+      field: 'temperature',
+      label: 'Temperature',
+      from: baseline.temperature.toFixed(2),
+      to: temperature.toFixed(2),
+    });
+  }
+  if (topP !== baseline.topP) {
+    diffs.push({
+      field: 'topP',
+      label: 'Top-P Sampling',
+      from: baseline.topP.toFixed(2),
+      to: topP.toFixed(2),
+    });
+  }
+  if (repetitionPenalty !== baseline.repetitionPenalty) {
+    diffs.push({
+      field: 'repetitionPenalty',
+      label: 'Repetition Penalty',
+      from: baseline.repetitionPenalty.toFixed(2),
+      to: repetitionPenalty.toFixed(2),
+    });
+  }
+  if (frequencyPenalty !== baseline.frequencyPenalty) {
+    diffs.push({
+      field: 'frequencyPenalty',
+      label: 'Frequency Penalty',
+      from: baseline.frequencyPenalty.toFixed(2),
+      to: frequencyPenalty.toFixed(2),
+    });
+  }
+  if (presencePenalty !== baseline.presencePenalty) {
+    diffs.push({
+      field: 'presencePenalty',
+      label: 'Presence Penalty',
+      from: baseline.presencePenalty.toFixed(2),
+      to: presencePenalty.toFixed(2),
+    });
+  }
+  if (maxTokens !== baseline.maxTokens) {
+    diffs.push({
+      field: 'maxTokens',
+      label: 'Max Response Length',
+      from: `${baseline.maxTokens} tok`,
+      to: `${maxTokens} tok`,
+    });
+  }
+  if (antiImpersonation !== baseline.antiImpersonation) {
+    diffs.push({
+      field: 'antiImpersonation',
+      label: 'Anti-User Impersonation',
+      from: baseline.antiImpersonation ? 'Enabled' : 'Disabled',
+      to: antiImpersonation ? 'Enabled' : 'Disabled',
+    });
+  }
+
+  const isDirty = diffs.length > 0;
+
+  // Sync dirty status to Zustand store for global navigation interception
+  useEffect(() => {
+    setHasUnsavedSettings(isDirty);
+    return () => {
+      setHasUnsavedSettings(false);
+    };
+  }, [isDirty, setHasUnsavedSettings]);
 
   // Apply a 1-click sampler preset
   const applyPreset = (preset: SamplerPreset) => {
@@ -250,8 +357,7 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
+  const persistSettings = () => {
     localStorage.setItem('renoog_api_key', apiKey.trim());
     localStorage.setItem('renoog_model', selectedModel);
     localStorage.setItem('renoog_temp', temperature.toString());
@@ -262,11 +368,43 @@ export const SettingsView: React.FC = () => {
     localStorage.setItem('renoog_max_tokens', maxTokens.toString());
     localStorage.setItem('renoog_anti_impersonation', antiImpersonation.toString());
 
+    setBaseline({
+      apiKey: apiKey.trim(),
+      selectedModel,
+      temperature,
+      topP,
+      repetitionPenalty,
+      frequencyPenalty,
+      presencePenalty,
+      maxTokens,
+      antiImpersonation,
+    });
+  };
+
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    persistSettings();
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2500);
   };
 
-  const allModels = [...DEFAULT_PRESET_MODELS, ...customModels];
+  const handleSaveAndProceed = () => {
+    persistSettings();
+    proceedNavigation();
+  };
+
+  const handleDiscardAndProceed = () => {
+    setApiKey(baseline.apiKey);
+    setSelectedModel(baseline.selectedModel);
+    setTemperature(baseline.temperature);
+    setTopP(baseline.topP);
+    setRepetitionPenalty(baseline.repetitionPenalty);
+    setFrequencyPenalty(baseline.frequencyPenalty);
+    setPresencePenalty(baseline.presencePenalty);
+    setMaxTokens(baseline.maxTokens);
+    setAntiImpersonation(baseline.antiImpersonation);
+    proceedNavigation();
+  };
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-y-auto bg-[#121214] text-zinc-100 p-6 md:p-10">
@@ -827,6 +965,89 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Dialog: Unsaved Settings Confirmation Guard */}
+      {pendingView && isDirty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl bg-[#18181b] border border-[#3f3f46] shadow-[0_25px_60px_rgba(0,0,0,0.9)] p-6 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start gap-3.5 pb-4 border-b border-[#27272a] mb-4">
+              <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 shrink-0 border border-amber-500/20">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-white">
+                  Unsaved Settings Detected
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  You have modified configuration settings that have not been saved yet. Would you like to save them before leaving?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingView(null)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-[#27272a] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Changed Settings Diffs List */}
+            <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-1">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+                Summary of Changes ({diffs.length}):
+              </div>
+              {diffs.map((diff) => (
+                <div
+                  key={diff.field}
+                  className="p-2.5 rounded-xl bg-[#121214] border border-[#27272a] flex items-center justify-between gap-3 text-xs"
+                >
+                  <span className="font-semibold text-zinc-300 truncate max-w-36">
+                    {diff.label}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+                    <span className="px-2 py-0.5 rounded-md bg-red-500/10 text-red-300 border border-red-500/20">
+                      {diff.from}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-zinc-500" />
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold">
+                      {diff.to}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 pt-4 border-t border-[#27272a]">
+              <button
+                type="button"
+                onClick={() => setPendingView(null)}
+                className="px-4 py-2.5 rounded-xl bg-[#27272a] hover:bg-[#323236] text-xs font-medium text-zinc-300 transition-colors"
+              >
+                Keep Editing
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDiscardAndProceed}
+                  className="px-3.5 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-xs font-semibold text-red-300 transition-colors"
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndProceed}
+                  className="px-4 py-2.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save & Continue</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
