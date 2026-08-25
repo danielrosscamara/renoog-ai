@@ -8,7 +8,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
-import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -29,6 +29,7 @@ export const App: React.FC = () => {
     deleteTurn,
     togglePinTurn,
     retryLastMessage,
+    rerollUserMessage,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -87,6 +88,16 @@ export const App: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isModelDropdownOpen]);
+
+  // Live Token Budget Diagnostics (~3.8 chars per token)
+  const totalContextChars =
+    activeTurns.reduce((acc, t) => acc + (t.swipes[t.active_index]?.length || 0), 0) +
+    (currentChar?.personality?.length || 0) +
+    (currentChar?.scenario?.length || 0) +
+    (currentPersona?.description?.length || 0);
+  const estimatedContextTokens = Math.max(120, Math.round(totalContextChars / 3.8));
+  const maxContextTokens = 8192;
+  const contextPercentage = Math.min(100, Math.round((estimatedContextTokens / maxContextTokens) * 100));
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100">
@@ -186,15 +197,40 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Prompt Inspector Action Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsInspectorOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
-              >
-                <Brain className="w-4 h-4 text-indigo-400" />
-                <span className="hidden sm:inline">Inspect Prompt</span>
-              </button>
+              {/* Header Right Actions */}
+              <div className="flex items-center gap-2.5">
+                {/* Live Context Token Budget Meter */}
+                <div
+                  className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#18181b] border border-[#27272a] text-xs shadow-xs"
+                  title="Estimated active prompt token consumption"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-300 tabular-nums">
+                      <span>{estimatedContextTokens.toLocaleString()} / {maxContextTokens.toLocaleString()}</span>
+                      <span className="text-zinc-500 font-mono">({contextPercentage}%)</span>
+                    </div>
+                    <div className="w-20 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          contextPercentage > 80 ? 'bg-red-500' : contextPercentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${contextPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Prompt Inspector Action Trigger */}
+                <button
+                  type="button"
+                  onClick={() => setIsInspectorOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
+                >
+                  <Brain className="w-4 h-4 text-indigo-400" />
+                  <span className="hidden sm:inline">Inspect Prompt</span>
+                </button>
+              </div>
             </header>
 
             {/* Scrollable Message List */}
@@ -212,7 +248,13 @@ export const App: React.FC = () => {
                       if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
                     }}
                     onReroll={(turnId) => {
-                      if (activeChatId) rerollMessage(activeChatId, turnId);
+                      if (activeChatId) {
+                        if (turn.role === 'user') {
+                          rerollUserMessage(activeChatId, turnId);
+                        } else {
+                          rerollMessage(activeChatId, turnId);
+                        }
+                      }
                     }}
                     onEdit={(turnId, newText) => {
                       if (activeChatId) editTurnMessage(activeChatId, turnId, newText);
