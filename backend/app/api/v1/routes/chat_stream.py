@@ -22,13 +22,25 @@ class StreamChatRequest(BaseModel):
     user_message: str = Field(..., description="User roleplay message input")
     model_name: str | None = Field(None, description="Optional LLM slug override")
     temperature: float | None = Field(None, ge=0.0, le=2.0)
+    top_p: float | None = Field(None, ge=0.0, le=1.0)
+    frequency_penalty: float | None = Field(None, ge=-2.0, le=2.0)
+    presence_penalty: float | None = Field(None, ge=-2.0, le=2.0)
+    repetition_penalty: float | None = Field(None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(None, ge=1, le=8192)
+    stop: list[str] | None = Field(None, description="Stop sequences to halt generation")
 
 async def stream_openrouter_generator(
     chat_id: str,
     payload_messages: list[dict],
     model_name: str,
     temperature: float,
-    api_key: str
+    api_key: str,
+    top_p: float | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    repetition_penalty: float | None = None,
+    max_tokens: int | None = None,
+    stop: list[str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Connects to OpenRouter API and streams tokens as Server-Sent Events."""
     full_response_text = ""
@@ -40,12 +52,24 @@ async def stream_openrouter_generator(
         "X-Title": "Renoog AI Roleplay Engine",
         "Content-Type": "application/json",
     }
-    body = {
+    body: dict = {
         "model": model_name,
         "messages": payload_messages,
         "temperature": temperature,
         "stream": True,
     }
+    if top_p is not None:
+        body["top_p"] = top_p
+    if frequency_penalty is not None and frequency_penalty != 0:
+        body["frequency_penalty"] = frequency_penalty
+    if presence_penalty is not None and presence_penalty != 0:
+        body["presence_penalty"] = presence_penalty
+    if repetition_penalty is not None and repetition_penalty != 1.0:
+        body["repetition_penalty"] = repetition_penalty
+    if max_tokens is not None and max_tokens > 0:
+        body["max_tokens"] = max_tokens
+    if stop:
+        body["stop"] = stop
 
     masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else "***"
     logger.info(f"[STREAM] 🚀 Connecting to OpenRouter URL={openrouter_url} | Model='{model_name}' | Key={masked_key}")
@@ -178,7 +202,9 @@ async def stream_chat_response(
     target_model = req.model_name or getattr(chat, "model_name", None) or settings.DEFAULT_MODEL
     target_temp = req.temperature if req.temperature is not None else float(getattr(chat, "temperature", 0.90))
 
-    logger.info(f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Target Model='{target_model}' | Temp={target_temp}")
+    logger.info(
+        f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Target Model='{target_model}' | Temp={target_temp} | RepPenalty={req.repetition_penalty} | MaxTokens={req.max_tokens}"
+    )
 
     return EventSourceResponse(
         stream_openrouter_generator(
@@ -186,6 +212,12 @@ async def stream_chat_response(
             payload_messages=compiled_messages,
             model_name=str(target_model),
             temperature=target_temp,
-            api_key=api_key
+            api_key=api_key,
+            top_p=req.top_p,
+            frequency_penalty=req.frequency_penalty,
+            presence_penalty=req.presence_penalty,
+            repetition_penalty=req.repetition_penalty,
+            max_tokens=req.max_tokens,
+            stop=req.stop,
         )
     )
