@@ -35,6 +35,7 @@ export const App: React.FC = () => {
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -45,6 +46,16 @@ export const App: React.FC = () => {
   const activeModel =
     localStorage.getItem('renoog_model') || currentChat?.model_name || 'anthropic/claude-3.5-sonnet';
   const displayModelName = activeModel.split('/')[1] || activeModel;
+
+  // Model Context Limit Registry (True Hardware Context Limits)
+  const getModelMaxTokens = (modelSlug: string): number => {
+    const s = modelSlug.toLowerCase();
+    if (s.includes('gemini-2') || s.includes('gemini-1.5')) return 1048576; // 1,000,000 (1M)
+    if (s.includes('claude-3') || s.includes('claude-3-5')) return 200000;  // 200,000 (200k)
+    if (s.includes('llama-3') || s.includes('nemotron') || s.includes('mistral-large')) return 128000; // 128,000 (128k)
+    if (s.includes('deepseek') || s.includes('qwen')) return 64000; // 64,000 (64k)
+    return 8192; // Default 8,192 (8k)
+  };
 
   // Available models list for quick switcher (presets + user custom models)
   const defaultPresets = [
@@ -67,6 +78,7 @@ export const App: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const tokenDropdownRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when a new message is added in chat view
   useEffect(() => {
@@ -75,30 +87,50 @@ export const App: React.FC = () => {
     }
   }, [activeTurns.length, activeView]);
 
-  // Close model dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
         setIsModelDropdownOpen(false);
       }
+      if (tokenDropdownRef.current && !tokenDropdownRef.current.contains(event.target as Node)) {
+        setIsTokenDropdownOpen(false);
+      }
     };
-    if (isModelDropdownOpen) {
+    if (isModelDropdownOpen || isTokenDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isModelDropdownOpen]);
+  }, [isModelDropdownOpen, isTokenDropdownOpen]);
 
-  // Live Token Budget Diagnostics (~3.8 chars per token)
-  const totalContextChars =
-    activeTurns.reduce((acc, t) => acc + (t.swipes[t.active_index]?.length || 0), 0) +
+  // Dynamic Token Layer Diagnostics (~3.8 chars per token)
+  const charLoreChars =
     (currentChar?.personality?.length || 0) +
     (currentChar?.scenario?.length || 0) +
-    (currentPersona?.description?.length || 0);
-  const estimatedContextTokens = Math.max(120, Math.round(totalContextChars / 3.8));
-  const maxContextTokens = 8192;
-  const contextPercentage = Math.min(100, Math.round((estimatedContextTokens / maxContextTokens) * 100));
+    (currentChar?.first_mes?.length || 0);
+  const personaChars = currentPersona?.description?.length || 0;
+  const dialogueChars = activeTurns.reduce((acc, t) => acc + (t.swipes[t.active_index]?.length || 0), 0);
+
+  const charLoreTokens = Math.max(1, Math.round(charLoreChars / 3.8));
+  const personaTokens = Math.max(1, Math.round(personaChars / 3.8));
+  const dialogueTokens = Math.max(0, Math.round(dialogueChars / 3.8));
+
+  const totalEstimatedTokens = charLoreTokens + personaTokens + dialogueTokens;
+  const maxContextTokens = getModelMaxTokens(activeModel);
+  const remainingHeadroomTokens = Math.max(0, maxContextTokens - totalEstimatedTokens);
+
+  const contextPercentage =
+    maxContextTokens >= 100000
+      ? Number(((totalEstimatedTokens / maxContextTokens) * 100).toFixed(2))
+      : Math.min(100, Math.round((totalEstimatedTokens / maxContextTokens) * 100));
+
+  const formatTokensShort = (tokens: number): string => {
+    if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+    if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+    return tokens.toLocaleString();
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100">
@@ -200,26 +232,116 @@ export const App: React.FC = () => {
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-2.5">
-                {/* Live Context Token Budget Meter */}
-                <div
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#18181b] border border-[#27272a] text-xs shadow-xs"
-                  title="Estimated active prompt token consumption"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-300 tabular-nums">
-                      <span>{estimatedContextTokens.toLocaleString()} / {maxContextTokens.toLocaleString()}</span>
-                      <span className="text-zinc-500 font-mono">({contextPercentage}%)</span>
+                {/* Live Context Token Budget Meter & Interactive Popover */}
+                <div ref={tokenDropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsTokenDropdownOpen((prev) => !prev)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#18181b] hover:bg-[#202024] border border-[#27272a] hover:border-amber-500/30 text-xs shadow-xs transition-all cursor-pointer"
+                    title="Click for full memory & context breakdown"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-300 tabular-nums">
+                        <span>{totalEstimatedTokens.toLocaleString()} / {formatTokensShort(maxContextTokens)}</span>
+                        <span className="text-zinc-500 font-mono">({contextPercentage}%)</span>
+                      </div>
+                      <div className="w-20 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            contextPercentage > 80 ? 'bg-red-500' : contextPercentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(2, contextPercentage))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-20 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          contextPercentage > 80 ? 'bg-red-500' : contextPercentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${contextPercentage}%` }}
-                      />
+                  </button>
+
+                  {/* Popover Dropdown */}
+                  {isTokenDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl bg-[#18181b] border border-zinc-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-3.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-xs select-none">
+                      {/* Header */}
+                      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-800">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span className="font-bold text-zinc-200">Context Memory</span>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
+                          {formatTokensShort(maxContextTokens)} Max Limit
+                        </span>
+                      </div>
+
+                      {/* Active Model Indicator */}
+                      <div className="bg-[#121214] p-2 rounded-xl border border-zinc-800/80 mb-3 flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-400">Active Engine</span>
+                        <span className="font-semibold text-zinc-200 truncate max-w-40">{displayModelName}</span>
+                      </div>
+
+                      {/* Layer Breakdown */}
+                      <div className="space-y-2 mb-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                          Active Prompt Layers
+                        </div>
+
+                        {/* Character Lore */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-purple-400" />
+                            <span className="text-zinc-300">Character Card Lore</span>
+                          </div>
+                          <span className="font-mono text-zinc-400 tabular-nums">
+                            {charLoreTokens.toLocaleString()} tokens
+                          </span>
+                        </div>
+
+                        {/* Persona Description */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                            <span className="text-zinc-300">Persona ({currentPersona.name})</span>
+                          </div>
+                          <span className="font-mono text-zinc-400 tabular-nums">
+                            {personaTokens.toLocaleString()} tokens
+                          </span>
+                        </div>
+
+                        {/* Dialogue History */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-400" />
+                            <span className="text-zinc-300">Dialogue ({activeTurns.length} turns)</span>
+                          </div>
+                          <span className="font-mono text-zinc-400 tabular-nums">
+                            {dialogueTokens.toLocaleString()} tokens
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Headroom Summary */}
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 mb-3 flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-medium text-emerald-400/80 uppercase">Available Headroom</span>
+                          <span className="text-xs font-bold font-mono">{remainingHeadroomTokens.toLocaleString()} tokens free</span>
+                        </div>
+                        <span className="text-xs font-bold font-mono">
+                          {(100 - Number(contextPercentage)).toFixed(1)}% Free
+                        </span>
+                      </div>
+
+                      {/* Action Button: Jump to Prompt Inspector */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTokenDropdownOpen(false);
+                          setIsInspectorOpen(true);
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                      >
+                        <Brain className="w-3.5 h-3.5" />
+                        <span>Inspect Raw Prompt Payload</span>
+                      </button>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Prompt Inspector Action Trigger */}
