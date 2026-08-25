@@ -30,6 +30,7 @@ export const App: React.FC = () => {
     togglePinTurn,
     retryLastMessage,
     rerollUserMessage,
+    generateGhostwriterSuggestion,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -318,6 +319,9 @@ export const App: React.FC = () => {
               onSendMessage={(text) => {
                 if (activeChatId) sendMessage(activeChatId, text);
               }}
+              onGhostwrite={
+                activeChatId ? () => generateGhostwriterSuggestion(activeChatId) : undefined
+              }
             />
 
             {/* 6-Layer Prompt Inspector Modal */}
