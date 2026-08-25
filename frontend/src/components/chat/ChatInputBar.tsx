@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Sparkles, Square, Paperclip } from 'lucide-react';
+import { ArrowUp, Sparkles, Square, Paperclip, Wand2 } from 'lucide-react';
 
 export interface ChatInputBarProps {
   onSendMessage: (text: string) => void;
+  onGhostwrite?: () => Promise<string>;
   isStreaming?: boolean;
   onStopStreaming?: () => void;
   characterName?: string;
@@ -11,12 +12,14 @@ export interface ChatInputBarProps {
 
 export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   onSendMessage,
+  onGhostwrite,
   isStreaming = false,
   onStopStreaming,
   characterName = 'Character',
   maxTokens = 8192,
 }) => {
   const [input, setInput] = useState('');
+  const [isGhostwriting, setIsGhostwriting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea based on content
@@ -39,6 +42,22 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
+    }
+  };
+
+  const handleGhostwrite = async () => {
+    if (!onGhostwrite || isGhostwriting || isStreaming) return;
+    try {
+      setIsGhostwriting(true);
+      const suggestion = await onGhostwrite();
+      if (suggestion) {
+        setInput((prev) => (prev ? `${prev} ${suggestion}` : suggestion));
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      }
+    } finally {
+      setIsGhostwriting(false);
     }
   };
 
@@ -99,6 +118,19 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
               <span>*Action*</span>
             </button>
+
+            {onGhostwrite && (
+              <button
+                type="button"
+                onClick={handleGhostwrite}
+                disabled={isGhostwriting || isStreaming}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 transition-all shadow-xs disabled:opacity-50"
+                title="AI Ghostwriter: Draft an in-character action/dialogue for your Persona"
+              >
+                <Wand2 className={`w-3.5 h-3.5 text-indigo-400 ${isGhostwriting ? 'animate-spin' : ''}`} />
+                <span>{isGhostwriting ? 'Suggesting...' : '✨ Suggest'}</span>
+              </button>
+            )}
 
             <button
               type="button"
