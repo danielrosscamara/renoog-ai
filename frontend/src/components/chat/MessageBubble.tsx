@@ -52,6 +52,7 @@ const RoleplayProse: React.FC<{ content: string }> = ({ content }) => {
 interface SwipeControlsProps {
   activeIndex: number;
   totalSwipes: number;
+  label?: string;
   onPrev: () => void;
   onNext: () => void;
   onReroll: () => void;
@@ -60,21 +61,20 @@ interface SwipeControlsProps {
 const SwipeControls: React.FC<SwipeControlsProps> = ({
   activeIndex,
   totalSwipes,
+  label = 'Reroll',
   onPrev,
   onNext,
   onReroll,
 }) => {
-  if (totalSwipes <= 1 && !onReroll) return null;
-
   return (
-    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#27272a]">
+    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#27272a]/80">
       <button
         onClick={onReroll}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
         aria-label="Reroll message"
       >
         <RefreshCw className="w-3.5 h-3.5" />
-        Reroll
+        <span>{label}</span>
       </button>
 
       <div className="flex-1" />
@@ -334,16 +334,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           }`}>
             <RoleplayProse content={activeContent} />
 
-            {/* Swipe Controls (Assistant only) */}
-            {isAssistant && (
-              <SwipeControls
-                activeIndex={turn.active_index}
-                totalSwipes={turn.swipes.length}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onReroll={() => onReroll(turn.id)}
-              />
-            )}
+            {/* Swipe & Reroll Controls */}
+            <SwipeControls
+              activeIndex={turn.active_index}
+              totalSwipes={turn.swipes.length}
+              label={isAssistant ? 'Reroll' : 'Reroll Response'}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              onReroll={() => onReroll(turn.id)}
+            />
           </div>
         )}
       </div>
