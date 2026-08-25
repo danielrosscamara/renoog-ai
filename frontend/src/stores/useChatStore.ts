@@ -16,6 +16,7 @@ export interface ChatState {
   isStreaming: boolean;
   isLoading: boolean;
   streamingError: string | null;
+  exactTokenUsage: Record<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>;
 
   // Actions
   initializeData: () => Promise<void>;
@@ -57,6 +58,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isStreaming: false,
   isLoading: false,
   streamingError: null,
+  exactTokenUsage: {},
 
   initializeData: async () => {
     try {
@@ -234,7 +236,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         });
       },
-      onDone: (savedTurnId: string, fullText: string) => {
+      onDone: (savedTurnId: string, fullText: string, usage) => {
         set((state) => {
           const turns = state.messageTurns[chatId] || [];
           const updatedTurns = turns.map((turn) => {
@@ -250,6 +252,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
           return {
             isStreaming: false,
+            exactTokenUsage:
+              usage && usage.prompt_tokens > 0
+                ? { ...state.exactTokenUsage, [chatId]: usage }
+                : state.exactTokenUsage,
             messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
           };
         });
@@ -337,7 +343,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         });
       },
-      onDone: (_savedTurnId: string, fullText: string) => {
+      onDone: (_savedTurnId: string, fullText: string, usage) => {
         set((state) => {
           const currentTurns = state.messageTurns[chatId] || [];
           const updatedTurns = currentTurns.map((turn) => {
@@ -355,6 +361,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
           return {
             isStreaming: false,
+            exactTokenUsage:
+              usage && usage.prompt_tokens > 0
+                ? { ...state.exactTokenUsage, [chatId]: usage }
+                : state.exactTokenUsage,
             messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
           };
         });
