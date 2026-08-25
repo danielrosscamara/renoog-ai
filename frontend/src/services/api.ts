@@ -169,7 +169,11 @@ export const api = {
     temperature?: number;
     apiKey?: string;
     onToken: (token: string) => void;
-    onDone: (turnId: string, fullText: string) => void;
+    onDone: (
+      turnId: string,
+      fullText: string,
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+    ) => void;
     onError: (err: string) => void;
   }): Promise<void> {
     try {
@@ -220,7 +224,11 @@ export const api = {
             if (parsed.event === 'token' && parsed.token) {
               onToken(parsed.token);
             } else if (parsed.event === 'done') {
-              onDone(parsed.turn_id, parsed.full_text);
+              onDone(parsed.turn_id, parsed.full_text, {
+                prompt_tokens: parsed.prompt_tokens || 0,
+                completion_tokens: parsed.completion_tokens || 0,
+                total_tokens: parsed.total_tokens || 0,
+              });
             } else if (parsed.event === 'error') {
               onError(parsed.error);
             }
