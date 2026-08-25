@@ -17,6 +17,7 @@ import {
   Trash2,
   X,
   Radio,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface ModelOption {
@@ -28,6 +29,82 @@ interface ModelOption {
   icon?: typeof Bot;
   isCustom?: boolean;
 }
+
+interface SamplerPreset {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  temp: number;
+  topP: number;
+  repPenalty: number;
+  freqPenalty: number;
+  presPenalty: number;
+  maxTokens: number;
+}
+
+const SAMPLER_PRESETS: SamplerPreset[] = [
+  {
+    id: 'immersive',
+    name: 'Immersive Roleplay',
+    emoji: '🎭',
+    description: 'Natural, expressive dialogue with rich emotions',
+    temp: 0.95,
+    topP: 0.90,
+    repPenalty: 1.15,
+    freqPenalty: 0.00,
+    presPenalty: 0.00,
+    maxTokens: 1024,
+  },
+  {
+    id: 'precise',
+    name: 'Precise & In-Char',
+    emoji: '⚡',
+    description: 'Strict character adherence & focused tone',
+    temp: 0.65,
+    topP: 0.85,
+    repPenalty: 1.05,
+    freqPenalty: 0.00,
+    presPenalty: 0.00,
+    maxTokens: 800,
+  },
+  {
+    id: 'novelistic',
+    name: 'Wild & Novelistic',
+    emoji: '🎨',
+    description: 'High creativity, rich metaphors & unexpected twists',
+    temp: 1.25,
+    topP: 0.98,
+    repPenalty: 1.20,
+    freqPenalty: 0.20,
+    presPenalty: 0.35,
+    maxTokens: 1500,
+  },
+  {
+    id: 'punchy',
+    name: 'Fast & Punchy',
+    emoji: '💬',
+    description: 'Rapid-fire short replies & messenger pacing',
+    temp: 0.85,
+    topP: 0.90,
+    repPenalty: 1.10,
+    freqPenalty: 0.10,
+    presPenalty: 0.00,
+    maxTokens: 300,
+  },
+  {
+    id: 'reasoning',
+    name: 'Deep Reasoning',
+    emoji: '🧠',
+    description: 'Logical deductions, RPG puzzles & complex lore analysis',
+    temp: 0.20,
+    topP: 0.95,
+    repPenalty: 1.00,
+    freqPenalty: 0.00,
+    presPenalty: 0.00,
+    maxTokens: 2048,
+  },
+];
 
 const DEFAULT_PRESET_MODELS: ModelOption[] = [
   {
@@ -89,9 +166,33 @@ export const SettingsView: React.FC = () => {
   const [topP, setTopP] = useState(() =>
     parseFloat(localStorage.getItem('renoog_top_p') || '0.95')
   );
+  const [repetitionPenalty, setRepetitionPenalty] = useState(() =>
+    parseFloat(localStorage.getItem('renoog_rep_penalty') || '1.15')
+  );
+  const [frequencyPenalty, setFrequencyPenalty] = useState(() =>
+    parseFloat(localStorage.getItem('renoog_freq_penalty') || '0.00')
+  );
+  const [presencePenalty, setPresencePenalty] = useState(() =>
+    parseFloat(localStorage.getItem('renoog_pres_penalty') || '0.00')
+  );
   const [maxTokens, setMaxTokens] = useState(() =>
     parseInt(localStorage.getItem('renoog_max_tokens') || '1024', 10)
   );
+  const [antiImpersonation, setAntiImpersonation] = useState(
+    () => localStorage.getItem('renoog_anti_impersonation') !== 'false'
+  );
+  const [activePreset, setActivePreset] = useState<string>('immersive');
+
+  // Apply a 1-click sampler preset
+  const applyPreset = (preset: SamplerPreset) => {
+    setTemperature(preset.temp);
+    setTopP(preset.topP);
+    setRepetitionPenalty(preset.repPenalty);
+    setFrequencyPenalty(preset.freqPenalty);
+    setPresencePenalty(preset.presPenalty);
+    setMaxTokens(preset.maxTokens);
+    setActivePreset(preset.id);
+  };
 
   // Modal for adding a new custom model
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -155,7 +256,11 @@ export const SettingsView: React.FC = () => {
     localStorage.setItem('renoog_model', selectedModel);
     localStorage.setItem('renoog_temp', temperature.toString());
     localStorage.setItem('renoog_top_p', topP.toString());
+    localStorage.setItem('renoog_rep_penalty', repetitionPenalty.toString());
+    localStorage.setItem('renoog_freq_penalty', frequencyPenalty.toString());
+    localStorage.setItem('renoog_pres_penalty', presencePenalty.toString());
     localStorage.setItem('renoog_max_tokens', maxTokens.toString());
+    localStorage.setItem('renoog_anti_impersonation', antiImpersonation.toString());
 
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2500);
@@ -365,81 +470,255 @@ export const SettingsView: React.FC = () => {
 
         {/* Section 3: Generation & Sampling Sliders */}
         <section className="p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl space-y-6">
-          <div className="flex items-center gap-2 text-base font-bold text-white pb-3 border-b border-[#27272a]">
-            <Sliders className="w-5 h-5 text-indigo-400" />
-            <span>Generation Parameters (Sampling Controls)</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#27272a]">
+            <div className="flex items-center gap-2 text-base font-bold text-white">
+              <Sliders className="w-5 h-5 text-indigo-400" />
+              <span>Generation Parameters (Sampling Controls)</span>
+            </div>
+            <span className="text-[11px] text-zinc-500">
+              Configure creativity, anti-looping penalties & response length
+            </span>
           </div>
 
-          {/* Temperature Slider */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold text-zinc-200">Temperature</label>
-                <p className="text-[11px] text-zinc-500">
-                  Controls randomness. Higher = creative/expressive; Lower = focused/literal.
-                </p>
-              </div>
-              <span className="text-sm font-mono font-bold text-indigo-400 bg-[#121214] px-2.5 py-1 rounded-lg border border-[#27272a]">
-                {temperature.toFixed(2)}
-              </span>
+          {/* 1-Click Sampler Presets */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-300">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>1-Click Sampler Presets</span>
             </div>
-            <input
-              type="range"
-              min="0.10"
-              max="2.00"
-              step="0.05"
-              value={temperature}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {SAMPLER_PRESETS.map((preset) => {
+                const isPresetActive = activePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                      isPresetActive
+                        ? 'bg-indigo-600/20 border-indigo-500/60 shadow-sm ring-1 ring-indigo-500/30'
+                        : 'bg-[#121214] border-[#27272a] hover:border-zinc-600 hover:bg-[#18181b]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base">{preset.emoji}</span>
+                      {isPresetActive && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-zinc-200">{preset.name}</div>
+                      <div className="text-[10px] text-zinc-400 line-clamp-1 mt-0.5">
+                        {preset.description}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Top-P Slider */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold text-zinc-200">Top-P (Nucleus Sampling)</label>
-                <p className="text-[11px] text-zinc-500">
-                  Limits the probability pool of candidate tokens.
-                </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-[#232326]">
+            {/* Temperature Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-zinc-200">Temperature</label>
+                  <p className="text-[11px] text-zinc-500">
+                    Randomness & creativity. Higher = expressive/wild; Lower = literal.
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {temperature.toFixed(2)}
+                </span>
               </div>
-              <span className="text-sm font-mono font-bold text-indigo-400 bg-[#121214] px-2.5 py-1 rounded-lg border border-[#27272a]">
-                {topP.toFixed(2)}
-              </span>
+              <input
+                type="range"
+                min="0.10"
+                max="2.00"
+                step="0.05"
+                value={temperature}
+                onChange={(e) => {
+                  setTemperature(parseFloat(e.target.value));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
             </div>
-            <input
-              type="range"
-              min="0.10"
-              max="1.00"
-              step="0.05"
-              value={topP}
-              onChange={(e) => setTopP(parseFloat(e.target.value))}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
+
+            {/* Top-P Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-zinc-200">Top-P (Nucleus Sampling)</label>
+                  <p className="text-[11px] text-zinc-500">
+                    Probability pool threshold for candidate tokens.
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {topP.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.10"
+                max="1.00"
+                step="0.05"
+                value={topP}
+                onChange={(e) => {
+                  setTopP(parseFloat(e.target.value));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Repetition Penalty Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-zinc-200">Repetition Penalty</label>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold">
+                      Anti-Looping
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    Penalizes repeated phrases & infinite text loops (1.15 is optimal).
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {repetitionPenalty.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1.00"
+                max="2.00"
+                step="0.05"
+                value={repetitionPenalty}
+                onChange={(e) => {
+                  setRepetitionPenalty(parseFloat(e.target.value));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-amber-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Frequency Penalty Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-zinc-200">Frequency Penalty</label>
+                  <p className="text-[11px] text-zinc-500">
+                    Penalizes words based on how frequently they appear in context.
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {frequencyPenalty.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-2.00"
+                max="2.00"
+                step="0.05"
+                value={frequencyPenalty}
+                onChange={(e) => {
+                  setFrequencyPenalty(parseFloat(e.target.value));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Presence Penalty Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-zinc-200">Presence Penalty</label>
+                  <p className="text-[11px] text-zinc-500">
+                    Encourages the model to introduce brand new topics & vocabulary.
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {presencePenalty.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-2.00"
+                max="2.00"
+                step="0.05"
+                value={presencePenalty}
+                onChange={(e) => {
+                  setPresencePenalty(parseFloat(e.target.value));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Max Output Tokens */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-zinc-200">Max Response Length</label>
+                  <p className="text-[11px] text-zinc-500">
+                    Length ceiling for a single companion reply (~75 words per 100 tokens).
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-[#121214] px-2 py-1 rounded-lg border border-[#27272a]">
+                  {maxTokens} tokens
+                </span>
+              </div>
+              <input
+                type="range"
+                min="128"
+                max="4096"
+                step="64"
+                value={maxTokens}
+                onChange={(e) => {
+                  setMaxTokens(parseInt(e.target.value, 10));
+                  setActivePreset('custom');
+                }}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+            </div>
           </div>
 
-          {/* Max Output Tokens */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          {/* Anti-User Impersonation Safeguard Switch */}
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#121214] border border-[#27272a] mt-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
               <div>
-                <label className="text-xs font-bold text-zinc-200">Max Response Tokens</label>
-                <p className="text-[11px] text-zinc-500">
-                  Maximum length limit for a single generated message.
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-zinc-200">
+                    Anti-User Impersonation Safeguard
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-semibold">
+                    Recommended
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Automatically halts generation if the AI attempts to speak, act, or roleplay as your Persona.
                 </p>
               </div>
-              <span className="text-sm font-mono font-bold text-indigo-400 bg-[#121214] px-2.5 py-1 rounded-lg border border-[#27272a]">
-                {maxTokens} tokens
-              </span>
             </div>
-            <input
-              type="range"
-              min="256"
-              max="4096"
-              step="128"
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(parseInt(e.target.value, 10))}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
+
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={antiImpersonation}
+                onChange={(e) => setAntiImpersonation(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
           </div>
         </section>
 
