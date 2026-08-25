@@ -17,6 +17,9 @@ export interface ChatState {
   isLoading: boolean;
   streamingError: string | null;
   exactTokenUsage: Record<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>;
+  hasUnsavedSettings: boolean;
+  pendingView: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null;
+  pendingChatId: string | null;
 
   // Actions
   initializeData: () => Promise<void>;
@@ -24,6 +27,9 @@ export interface ChatState {
   setActiveCharacter: (characterId: string) => void;
   setActivePersona: (personaId: string) => void;
   setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => void;
+  setHasUnsavedSettings: (isDirty: boolean) => void;
+  setPendingView: (view: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null) => void;
+  proceedNavigation: () => void;
   toggleSidebar: () => void;
   setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
@@ -86,6 +92,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   streamingError: null,
   exactTokenUsage: {},
+  hasUnsavedSettings: false,
+  pendingView: null,
+  pendingChatId: null,
 
   initializeData: async () => {
     try {
@@ -116,11 +125,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setActiveChat: async (chatId: string) => {
+    // Intercept navigation if there are unsaved settings
+    if (get().hasUnsavedSettings && get().activeView === 'settings') {
+      set({ pendingView: 'chat', pendingChatId: chatId });
+      return;
+    }
+
     const chat = get().chats.find((c) => c.id === chatId);
     set({
       activeChatId: chatId,
       activeCharacterId: chat ? chat.character_id : get().activeCharacterId,
       activeView: 'chat',
+      pendingView: null,
+      pendingChatId: null,
       streamingError: null,
     });
 
@@ -146,7 +163,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => {
-    set({ activeView: view });
+    // Intercept navigation if there are unsaved settings
+    if (get().hasUnsavedSettings && get().activeView === 'settings' && view !== 'settings') {
+      set({ pendingView: view, pendingChatId: null });
+      return;
+    }
+    set({ activeView: view, pendingView: null, pendingChatId: null });
+  },
+
+  setHasUnsavedSettings: (isDirty: boolean) => {
+    set({ hasUnsavedSettings: isDirty });
+  },
+
+  setPendingView: (view: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null) => {
+    set({ pendingView: view, pendingChatId: null });
+  },
+
+  proceedNavigation: () => {
+    const { pendingView, pendingChatId } = get();
+    set({ hasUnsavedSettings: false, pendingView: null });
+    if (pendingChatId) {
+      get().setActiveChat(pendingChatId);
+    } else if (pendingView) {
+      set({ activeView: pendingView, pendingChatId: null });
+    }
   },
 
   toggleSidebar: () => {
