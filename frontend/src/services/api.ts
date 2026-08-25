@@ -158,6 +158,12 @@ export const api = {
     userMessage,
     modelName,
     temperature,
+    topP,
+    frequencyPenalty,
+    presencePenalty,
+    repetitionPenalty,
+    maxTokens,
+    stopSequences,
     apiKey,
     onToken,
     onDone,
@@ -167,6 +173,12 @@ export const api = {
     userMessage: string;
     modelName?: string;
     temperature?: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    repetitionPenalty?: number;
+    maxTokens?: number;
+    stopSequences?: string[];
     apiKey?: string;
     onToken: (token: string) => void;
     onDone: (
@@ -192,6 +204,12 @@ export const api = {
           user_message: userMessage,
           model_name: modelName,
           temperature,
+          top_p: topP,
+          frequency_penalty: frequencyPenalty,
+          presence_penalty: presencePenalty,
+          repetition_penalty: repetitionPenalty,
+          max_tokens: maxTokens,
+          stop: stopSequences,
         }),
       });
 
