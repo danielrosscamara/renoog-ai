@@ -88,10 +88,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   personas: MOCK_PERSONAS,
   chats: MOCK_CHATS,
   messageTurns: MOCK_MESSAGE_TURNS,
-  activeChatId: 'chat_lyra_01',
-  activeCharacterId: 'char_lyra',
+  activeChatId: localStorage.getItem('renoog_last_chat_id') || null,
+  activeCharacterId: localStorage.getItem('renoog_last_char_id') || null,
   activePersonaId: 'persona_adventurer',
-  activeView: 'chat',
+  activeView: (localStorage.getItem('renoog_last_view') as ViewType) || 'chat',
   isSidebarOpen: true,
   isStreaming: false,
   isLoading: false,
@@ -111,8 +111,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         api.getChats(),
       ]);
 
+      const savedChatId = localStorage.getItem('renoog_last_chat_id');
+      const targetChat = chats.find((c) => c.id === savedChatId) || chats[0];
       const defaultPersona = personas.find((p) => p.is_default) || personas[0];
-      const initialChat = chats[0];
 
       set({
         characters: characters.length > 0 ? characters : get().characters,
@@ -122,8 +123,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isLoading: false,
       });
 
-      if (initialChat) {
-        await get().setActiveChat(initialChat.id);
+      if (targetChat) {
+        await get().setActiveChat(targetChat.id);
+      } else if (chats.length === 0) {
+        set({ activeView: 'gallery' });
       }
     } catch {
       set({ isLoading: false });
@@ -138,9 +141,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const chat = get().chats.find((c) => c.id === chatId);
+    const charId = chat ? chat.character_id : get().activeCharacterId;
+    localStorage.setItem('renoog_last_chat_id', chatId);
+    if (charId) {
+      localStorage.setItem('renoog_last_char_id', charId);
+    }
+    localStorage.setItem('renoog_last_view', 'chat');
+
     set({
       activeChatId: chatId,
-      activeCharacterId: chat ? chat.character_id : get().activeCharacterId,
+      activeCharacterId: charId,
       activeView: 'chat',
       pendingView: null,
       pendingChatId: null,
@@ -174,6 +184,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ pendingView: view, pendingChatId: null });
       return;
     }
+    localStorage.setItem('renoog_last_view', view);
     set({ activeView: view, pendingView: null, pendingChatId: null });
   },
 
