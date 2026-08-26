@@ -134,6 +134,23 @@ export const api = {
     };
   },
 
+  async updateChat(chatId: string, updates: Partial<Chat>): Promise<Chat> {
+    const res = await fetch(`${API_BASE_URL}/chats/${chatId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update chat');
+    return res.json();
+  },
+
+  async deleteChat(chatId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/chats/${chatId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete chat');
+  },
+
   async updateTurnSwipe(chatId: string, turnId: string, activeIndex: number): Promise<MessageTurn> {
     const res = await fetch(`${API_BASE_URL}/chats/${chatId}/turns/${turnId}/swipe`, {
       method: 'PUT',
