@@ -9,12 +9,7 @@ import {
   Download,
   Tag,
   Loader2,
-  ChevronUp,
-  ChevronDown,
   Layers,
-  Bot,
-  User,
-  Shield,
   Image as ImageIcon,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
@@ -173,26 +168,6 @@ export const CharacterStudio: React.FC = () => {
     setPromptItems(remaining);
     if (selectedItemId === id) {
       setSelectedItemId(remaining[0]?.id || '');
-    }
-  };
-
-  // Move prompt item up/down
-  const moveItem = (index: number, direction: 'up' | 'down', e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (
-      (direction === 'up' && index === 0) ||
-      (direction === 'down' && index === promptItems.length - 1)
-    ) {
-      return;
-    }
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const reordered = [...promptItems];
-    const temp = reordered[index];
-    const target = reordered[targetIndex];
-    if (temp && target) {
-      reordered[index] = target;
-      reordered[targetIndex] = temp;
-      setPromptItems(reordered.map((item, idx) => ({ ...item, order: idx })));
     }
   };
 
@@ -663,9 +638,8 @@ export const CharacterStudio: React.FC = () => {
 
             {/* Prompt Items Scrollable List */}
             <div className="space-y-2 flex-1">
-              {promptItems.map((item, idx) => {
+              {promptItems.map((item) => {
                 const isSelected = item.id === selectedItemId;
-                const tokenCost = countTokens(item.content);
 
                 return (
                   <div
@@ -677,58 +651,10 @@ export const CharacterStudio: React.FC = () => {
                         : 'bg-[#1a1a1e] hover:bg-[#202026] border-[#27272a]'
                     }`}
                   >
-                    {/* Reorder Arrows & Name */}
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="flex flex-col text-zinc-500 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => moveItem(idx, 'up', e)}
-                          disabled={idx === 0}
-                          className="hover:text-white disabled:opacity-20 p-0.5"
-                        >
-                          <ChevronUp className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => moveItem(idx, 'down', e)}
-                          disabled={idx === promptItems.length - 1}
-                          className="hover:text-white disabled:opacity-20 p-0.5"
-                        >
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-zinc-200 truncate block">
-                          {item.name}
-                        </span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {/* Role Icon Badge */}
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
-                              item.role === 'system'
-                                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
-                                : item.role === 'user'
-                                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
-                                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                            }`}
-                          >
-                            {item.role === 'system' ? (
-                              <Shield className="w-2.5 h-2.5 inline mr-0.5" />
-                            ) : item.role === 'user' ? (
-                              <User className="w-2.5 h-2.5 inline mr-0.5" />
-                            ) : (
-                              <Bot className="w-2.5 h-2.5 inline mr-0.5" />
-                            )}
-                            {item.role.toUpperCase()}
-                          </span>
-
-                          <span className="text-[10px] text-zinc-500 font-mono">
-                            {tokenCost}t
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Clean Item Title */}
+                    <span className="text-xs font-semibold text-zinc-200 truncate flex-1">
+                      {item.name}
+                    </span>
 
                     {/* Enable/Disable Switch */}
                     <button
