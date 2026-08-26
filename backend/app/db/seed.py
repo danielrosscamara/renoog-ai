@@ -92,7 +92,7 @@ async def seed_database():
                 title="The Clocktower Secret",
                 model_name="anthropic/claude-3.5-sonnet",
                 temperature=0.90,
-                is_pinned=True,
+                is_pinned=False,
             )
             session.add(chat)
 
