@@ -6,6 +6,7 @@ import { CharacterGallery } from './components/gallery/CharacterGallery';
 import { PersonaManager } from './components/personas/PersonaManager';
 import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
+import { CharacterStudio } from './components/studio/CharacterStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { useChatStore } from './stores/useChatStore';
 import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from 'lucide-react';
@@ -13,6 +14,7 @@ import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from '
 export const App: React.FC = () => {
   const {
     activeChatId,
+    editingCharacter,
     chats,
     characters,
     personas,
@@ -517,8 +519,10 @@ export const App: React.FC = () => {
         {/* VIEW D: App & Model Settings */}
         {activeView === 'settings' && <SettingsView />}
 
-        {/* VIEW E: Dev Studio & Character Manager */}
-        {activeView === 'studio' && <DevStudio />}
+        {/* VIEW E: Dev Studio & Character Prompt Studio */}
+        {activeView === 'studio' && (
+          editingCharacter ? <CharacterStudio /> : <DevStudio />
+        )}
       </main>
     </div>
   );
