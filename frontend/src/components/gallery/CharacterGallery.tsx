@@ -241,7 +241,7 @@ export const CharacterGallery: React.FC = () => {
                 creator: 'You',
                 created_at: new Date().toISOString(),
               });
-              setActiveView('studio');
+              setActiveView('character-studio');
             }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md cursor-pointer"
           >
@@ -379,7 +379,7 @@ export const CharacterGallery: React.FC = () => {
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingCharacter(character);
-                        setActiveView('studio');
+                        setActiveView('character-studio');
                       }}
                       className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all cursor-pointer"
                     >
