@@ -36,6 +36,8 @@ export interface ChatState {
   sendMessage: (chatId: string, text: string) => Promise<void>;
   rerollMessage: (chatId: string, turnId: string) => Promise<void>;
   createNewChat: (characterId: string) => Promise<string>;
+  togglePinChat: (chatId: string) => Promise<void>;
+  deleteChat: (chatId: string) => Promise<void>;
   addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
@@ -500,6 +502,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeView: 'chat',
       }));
       return newChatId;
+    }
+  },
+
+  togglePinChat: async (chatId: string) => {
+    const chat = get().chats.find((c) => c.id === chatId);
+    if (!chat) return;
+    const newPinned = !chat.is_pinned;
+    set((state) => ({
+      chats: state.chats.map((c) =>
+        c.id === chatId ? { ...c, is_pinned: newPinned } : c
+      ),
+    }));
+    try {
+      await api.updateChat(chatId, { is_pinned: newPinned });
+    } catch {
+      // Retain optimistic update
+    }
+  },
+
+  deleteChat: async (chatId: string) => {
+    const remainingChats = get().chats.filter((c) => c.id !== chatId);
+    const newActiveId =
+      get().activeChatId === chatId
+        ? remainingChats[0]?.id || null
+        : get().activeChatId;
+
+    set({
+      chats: remainingChats,
+      activeChatId: newActiveId,
+    });
+
+    if (newActiveId) {
+      await get().setActiveChat(newActiveId);
+    }
+
+    try {
+      await api.deleteChat(chatId);
+    } catch {
+      // Retain optimistic deletion
     }
   },
 
