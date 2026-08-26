@@ -329,7 +329,7 @@ export const CharacterStudio: React.FC = () => {
               Character Prompt Studio
             </h1>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 font-semibold">
-              TavernAI V2 Standard
+              V1
             </span>
           </div>
         </div>
