@@ -13,6 +13,19 @@ export const api = {
     return res.json();
   },
 
+  async createCharacter(data: Partial<Character>): Promise<Character> {
+    const res = await fetch(`${API_BASE_URL}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(errJson.detail || 'Failed to create character');
+    }
+    return res.json();
+  },
+
   async updateCharacter(id: string, updates: Partial<Character>): Promise<Character> {
     const res = await fetch(`${API_BASE_URL}/characters/${id}`, {
       method: 'PUT',
