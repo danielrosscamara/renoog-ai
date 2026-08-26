@@ -1,3 +1,15 @@
+export interface PromptItem {
+  id: string;
+  name: string;
+  role: 'system' | 'user' | 'assistant';
+  position: 'relative' | 'depth';
+  depth?: number;
+  content: string;
+  enabled: boolean;
+  trim?: boolean;
+  order: number;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -8,6 +20,8 @@ export interface Character {
   first_mes: string;
   mes_example?: string;
   avatar_url: string;
+  wallpaper_url?: string;
+  prompt_items?: PromptItem[];
   tags: string[];
   is_favorite: boolean;
   is_hidden?: boolean;
