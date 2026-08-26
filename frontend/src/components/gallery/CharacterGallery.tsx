@@ -30,7 +30,15 @@ const AVAILABLE_PILL_TAGS = [
 ];
 
 export const CharacterGallery: React.FC = () => {
-  const { characters, createNewChat, importCharacterPng, exportCharacterPng, updateCharacter } = useChatStore();
+  const {
+    characters,
+    createNewChat,
+    importCharacterPng,
+    exportCharacterPng,
+    updateCharacter,
+    setEditingCharacter,
+    setActiveView,
+  } = useChatStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -215,7 +223,27 @@ export const CharacterGallery: React.FC = () => {
           </button>
           <button
             type="button"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md"
+            onClick={() => {
+              setEditingCharacter({
+                id: `char_${Date.now()}`,
+                name: 'New Companion',
+                tagline: 'A mysterious new character waiting to be written.',
+                description: '',
+                personality: '',
+                scenario: '',
+                first_mes:
+                  '*looks up as you enter, acknowledging your presence with a subtle nod* "Welcome. Who might you be?"',
+                mes_example: '',
+                avatar_url:
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60',
+                tags: ['Custom'],
+                is_favorite: false,
+                creator: 'You',
+                created_at: new Date().toISOString(),
+              });
+              setActiveView('studio');
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white transition-all shadow-md cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Character</span>
@@ -323,7 +351,8 @@ export const CharacterGallery: React.FC = () => {
             {filteredCharacters.map((character: Character) => (
               <div
                 key={character.id}
-                className="group relative flex flex-col rounded-2xl bg-[#18181b] border border-[#27272a] hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-300 overflow-hidden"
+                onClick={() => handleStartChat(character.id)}
+                className="group relative flex flex-col rounded-2xl bg-[#18181b] border border-[#27272a] hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-300 overflow-hidden cursor-pointer"
               >
                 {/* Image Container with Vignette */}
                 <div className="relative aspect-4/3 w-full overflow-hidden bg-zinc-900">
@@ -346,12 +375,13 @@ export const CharacterGallery: React.FC = () => {
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
-                      title="Edit Character Lore"
+                      title="Edit in Character Prompt Studio"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingChar(character);
+                        setEditingCharacter(character);
+                        setActiveView('studio');
                       }}
-                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all"
+                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -359,7 +389,7 @@ export const CharacterGallery: React.FC = () => {
                       type="button"
                       title="Export as TavernAI V2 PNG Card"
                       onClick={(e) => handleExport(e, character.id)}
-                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all"
+                      className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
