@@ -11,7 +11,6 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
-  PenLine,
   ChevronDown,
   Check,
 } from 'lucide-react';
@@ -25,6 +24,7 @@ interface ChatContextMenuProps {
 }
 
 const ChatContextMenu: React.FC<ChatContextMenuProps> = ({ chat, onClose }) => {
+  const { togglePinChat, deleteChat } = useChatStore();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,23 +43,22 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({ chat, onClose }) => {
       className="absolute right-2 top-8 z-50 w-44 rounded-xl bg-[#27272a] border border-[#3f3f46] shadow-xl py-1"
     >
       <button
-        onClick={onClose}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-[#3f3f46] hover:text-white transition-colors"
-      >
-        <PenLine className="w-4 h-4 text-zinc-400" />
-        Rename
-      </button>
-      <button
-        onClick={onClose}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-[#3f3f46] hover:text-white transition-colors"
+        onClick={() => {
+          togglePinChat(chat.id);
+          onClose();
+        }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-[#3f3f46] hover:text-white transition-colors cursor-pointer"
       >
         <Pin className="w-4 h-4 text-zinc-400" />
         {chat.is_pinned ? 'Unpin' : 'Pin Chat'}
       </button>
       <div className="my-1 border-t border-[#3f3f46]" />
       <button
-        onClick={onClose}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+        onClick={() => {
+          deleteChat(chat.id);
+          onClose();
+        }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
       >
         <Trash2 className="w-4 h-4" />
         Delete Chat
