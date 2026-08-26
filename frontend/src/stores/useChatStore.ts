@@ -111,6 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         api.getChats(),
       ]);
 
+      const savedView = (localStorage.getItem('renoog_last_view') as ViewType) || 'chat';
       const savedChatId = localStorage.getItem('renoog_last_chat_id');
       const targetChat = chats.find((c) => c.id === savedChatId) || chats[0];
       const defaultPersona = personas.find((p) => p.is_default) || personas[0];
@@ -120,11 +121,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         personas: personas.length > 0 ? personas : get().personas,
         chats: chats.length > 0 ? chats : get().chats,
         activePersonaId: defaultPersona ? defaultPersona.id : get().activePersonaId,
+        activeView: savedView,
         isLoading: false,
       });
 
       if (targetChat) {
-        await get().setActiveChat(targetChat.id);
+        set({
+          activeChatId: targetChat.id,
+          activeCharacterId: targetChat.character_id,
+        });
+        try {
+          const { turns } = await api.getChatWithTurns(targetChat.id);
+          set((state) => ({
+            messageTurns: {
+              ...state.messageTurns,
+              [targetChat.id]: turns,
+            },
+          }));
+        } catch {
+          // Retain memory turns
+        }
       } else if (chats.length === 0) {
         set({ activeView: 'gallery' });
       }
