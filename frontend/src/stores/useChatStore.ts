@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Character, Persona, Chat, MessageTurn } from '../types';
+import type { Character, Persona, Chat, MessageTurn, ViewType } from '../types';
 import { api } from '../services/api';
 import { MOCK_CHARACTERS, MOCK_PERSONAS, MOCK_CHATS, MOCK_MESSAGE_TURNS } from '../data/mockData';
 
@@ -11,14 +11,14 @@ export interface ChatState {
   activeChatId: string | null;
   activeCharacterId: string | null;
   activePersonaId: string;
-  activeView: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio';
+  activeView: ViewType;
   isSidebarOpen: boolean;
   isStreaming: boolean;
   isLoading: boolean;
   streamingError: string | null;
   exactTokenUsage: Record<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>;
   hasUnsavedSettings: boolean;
-  pendingView: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null;
+  pendingView: ViewType | null;
   pendingChatId: string | null;
   editingCharacter: Character | null;
 
@@ -27,9 +27,9 @@ export interface ChatState {
   setActiveChat: (chatId: string) => Promise<void>;
   setActiveCharacter: (characterId: string) => void;
   setActivePersona: (personaId: string) => void;
-  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => void;
+  setActiveView: (view: ViewType) => void;
   setHasUnsavedSettings: (isDirty: boolean) => void;
-  setPendingView: (view: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null) => void;
+  setPendingView: (view: ViewType | null) => void;
   proceedNavigation: () => void;
   toggleSidebar: () => void;
   setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
@@ -166,7 +166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activePersonaId: personaId });
   },
 
-  setActiveView: (view: 'chat' | 'gallery' | 'personas' | 'settings' | 'studio') => {
+  setActiveView: (view: ViewType) => {
     // Intercept navigation if there are unsaved settings
     if (get().hasUnsavedSettings && get().activeView === 'settings' && view !== 'settings') {
       set({ pendingView: view, pendingChatId: null });
@@ -179,7 +179,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ hasUnsavedSettings: isDirty });
   },
 
-  setPendingView: (view: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null) => {
+  setPendingView: (view: ViewType | null) => {
     set({ pendingView: view, pendingChatId: null });
   },
 

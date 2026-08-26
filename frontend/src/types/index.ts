@@ -60,10 +60,5 @@ export interface Chat {
   updated_at: string;
 }
 
-export interface AppSettings {
-  openrouter_api_key: string;
-  selected_model: string;
-  custom_temperature: number;
-  telemetry_enabled: boolean;
-  theme: 'dark' | 'light';
-}
+export type ViewType = 'chat' | 'gallery' | 'personas' | 'settings' | 'studio' | 'character-studio';
+
