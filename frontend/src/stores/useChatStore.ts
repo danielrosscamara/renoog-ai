@@ -20,6 +20,7 @@ export interface ChatState {
   hasUnsavedSettings: boolean;
   pendingView: ('chat' | 'gallery' | 'personas' | 'settings' | 'studio') | null;
   pendingChatId: string | null;
+  editingCharacter: Character | null;
 
   // Actions
   initializeData: () => Promise<void>;
@@ -38,6 +39,8 @@ export interface ChatState {
   addPersona: (personaData: Omit<Persona, 'id'>) => Promise<string>;
   updatePersona: (id: string, updates: Partial<Persona>) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
+  createCharacter: (characterData: Partial<Character>) => Promise<Character>;
+  setEditingCharacter: (char: Character | null) => void;
   updateCharacter: (id: string, updates: Partial<Character>) => Promise<void>;
   toggleCharacterVisibility: (characterId: string) => Promise<void>;
   deleteCharacter: (characterId: string) => Promise<void>;
@@ -95,6 +98,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasUnsavedSettings: false,
   pendingView: null,
   pendingChatId: null,
+  editingCharacter: null,
 
   initializeData: async () => {
     try {
@@ -543,6 +547,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch {
       // Retain deletion
     }
+  },
+
+  createCharacter: async (characterData: Partial<Character>) => {
+    try {
+      const newChar = await api.createCharacter(characterData);
+      set((state) => ({
+        characters: [newChar, ...state.characters],
+        activeCharacterId: newChar.id,
+        editingCharacter: null,
+      }));
+      return newChar;
+    } catch {
+      const fallbackChar: Character = {
+        id: `char_${Date.now()}`,
+        name: characterData.name || 'New Character',
+        tagline: characterData.tagline || '',
+        description: characterData.description || '',
+        personality: characterData.personality || '',
+        scenario: characterData.scenario || '',
+        first_mes: characterData.first_mes || 'Hello!',
+        mes_example: characterData.mes_example || '',
+        avatar_url: characterData.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60',
+        wallpaper_url: characterData.wallpaper_url || '',
+        prompt_items: characterData.prompt_items || [],
+        tags: characterData.tags || ['Custom'],
+        is_favorite: false,
+        is_hidden: false,
+        creator: characterData.creator || 'You',
+        created_at: new Date().toISOString(),
+      };
+      set((state) => ({
+        characters: [fallbackChar, ...state.characters],
+        activeCharacterId: fallbackChar.id,
+        editingCharacter: null,
+      }));
+      return fallbackChar;
+    }
+  },
+
+  setEditingCharacter: (char: Character | null) => {
+    set({ editingCharacter: char });
   },
 
   updateCharacter: async (id: string, updates: Partial<Character>) => {
