@@ -14,7 +14,6 @@ import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from '
 export const App: React.FC = () => {
   const {
     activeChatId,
-    editingCharacter,
     chats,
     characters,
     personas,
@@ -519,10 +518,11 @@ export const App: React.FC = () => {
         {/* VIEW D: App & Model Settings */}
         {activeView === 'settings' && <SettingsView />}
 
-        {/* VIEW E: Dev Studio & Character Prompt Studio */}
-        {activeView === 'studio' && (
-          editingCharacter ? <CharacterStudio /> : <DevStudio />
-        )}
+        {/* VIEW E: Dev Studio (Admin & Moderation Console) */}
+        {activeView === 'studio' && <DevStudio />}
+
+        {/* VIEW F: TavernAI Prompt Manager & Character Studio */}
+        {activeView === 'character-studio' && <CharacterStudio />}
       </main>
     </div>
   );
