@@ -10,6 +10,7 @@ import { CharacterStudio } from './components/studio/CharacterStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
+import { api } from './services/api';
 import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -42,6 +43,22 @@ export const App: React.FC = () => {
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [modelTab, setModelTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
+  const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
+    const stored = localStorage.getItem('renoog_ollama_model');
+    return stored ? [stored] : [];
+  });
+
+  // Live auto-discovery of locally installed Ollama models
+  useEffect(() => {
+    if (isModelDropdownOpen || activeProvider === 'ollama') {
+      const ollamaUrl = localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434';
+      api.testOllamaConnection(ollamaUrl).then((res) => {
+        if (res.ok && res.models) {
+          setInstalledOllamaModels(res.models);
+        }
+      });
+    }
+  }, [isModelDropdownOpen, activeProvider]);
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -73,8 +90,9 @@ export const App: React.FC = () => {
     const s = modelSlug.toLowerCase();
     if (s.includes('gemini-2') || s.includes('gemini-1.5')) return 1048576; // 1,000,000 (1M)
     if (s.includes('claude-3') || s.includes('claude-3-5')) return 200000;  // 200,000 (200k)
-    if (s.includes('llama-3') || s.includes('llama3') || s.includes('nemotron') || s.includes('mistral-large')) return 128000; // 128,000 (128k)
+    if (s.includes('llama-3') || s.includes('llama3') || s.includes('nemotron') || s.includes('mistral-large') || s.includes('hermes3') || s.includes('hermes-3')) return 128000; // 128,000 (128k)
     if (s.includes('deepseek') || s.includes('qwen')) return 64000; // 64,000 (64k)
+    if (s.includes('phi') || s.includes('dolphin')) return 8192; // 8,192 (8k)
     return 8192; // Default 8,192 (8k)
   };
 
@@ -88,14 +106,34 @@ export const App: React.FC = () => {
     isFree: boolean;
   }
 
-  const QUICK_MODELS: QuickModelItem[] = [
-    // Local Ollama Models
-    { id: 'llama3.2:3b', name: 'Llama 3.2 3B', category: 'local', badge: 'GPU', tagline: 'Meta · 128k Context · Offline', isFree: true },
-    { id: 'qwen2.5-coder:1.5b', name: 'Qwen 2.5 Coder 1.5B', category: 'local', badge: 'GPU', tagline: 'Alibaba · Fast & Compact', isFree: true },
-    { id: 'qwen2.5:1.5b', name: 'Qwen 2.5 1.5B', category: 'local', badge: 'GPU', tagline: 'Alibaba · Storytelling', isFree: true },
-    { id: 'qwen2.5:3b', name: 'Qwen 2.5 3B', category: 'local', badge: 'GPU', tagline: 'Alibaba · High Nuance', isFree: true },
-    { id: 'mistral:7b', name: 'Mistral 7B', category: 'local', badge: 'GPU', tagline: 'Mistral · Narrative RP', isFree: true },
-    // Cloud OpenRouter Models
+  // Dynamically constructed Local GPU models from live Ollama detection
+  const dynamicLocalModels: QuickModelItem[] = installedOllamaModels.map((modelTag) => {
+    const cleanName = modelTag.replace(':latest', '');
+    return {
+      id: modelTag,
+      name: cleanName,
+      category: 'local' as const,
+      badge: 'GPU',
+      tagline: `Installed Local Model (${cleanName})`,
+      isFree: true,
+    };
+  });
+
+  // Ensure active local model is present even before first ping
+  if (activeProvider === 'ollama' && ollamaModel && !dynamicLocalModels.some((m) => m.id === ollamaModel)) {
+    const cleanName = ollamaModel.replace(':latest', '');
+    dynamicLocalModels.unshift({
+      id: ollamaModel,
+      name: cleanName,
+      category: 'local' as const,
+      badge: 'GPU',
+      tagline: `Active Local Model (${cleanName})`,
+      isFree: true,
+    });
+  }
+
+  // Cloud OpenRouter Models
+  const CLOUD_MODELS: QuickModelItem[] = [
     { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', category: 'cloud', badge: 'Cloud', tagline: 'Anthropic · Supreme Prose', isFree: false },
     { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', category: 'cloud', badge: 'Cloud', tagline: 'Meta · High Immersion', isFree: false },
     { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', category: 'cloud', badge: 'Cloud', tagline: 'DeepSeek · Deep Reasoning', isFree: false },
@@ -113,9 +151,10 @@ export const App: React.FC = () => {
   }
 
   const allAvailableModels: QuickModelItem[] = [
-    ...QUICK_MODELS,
+    ...dynamicLocalModels,
+    ...CLOUD_MODELS,
     ...customModelPresets
-      .filter((c) => !QUICK_MODELS.some((p) => p.id === c.id))
+      .filter((c) => !CLOUD_MODELS.some((p) => p.id === c.id) && !dynamicLocalModels.some((m) => m.id === c.id))
       .map((c) => ({
         id: c.id,
         name: c.name || c.id,
