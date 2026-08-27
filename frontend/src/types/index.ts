@@ -62,3 +62,23 @@ export interface Chat {
 
 export type ViewType = 'chat' | 'gallery' | 'personas' | 'settings' | 'studio' | 'character-studio';
 
+export type LLMProvider = 'openrouter' | 'ollama' | 'custom';
+
+export interface AppSettings {
+  provider: LLMProvider;
+  openrouter_api_key: string;
+  selected_model: string;
+  ollama_base_url: string;
+  ollama_model: string;
+  custom_endpoint_url: string;
+  custom_api_key?: string;
+  custom_temperature: number;
+  top_p: number;
+  frequency_penalty: number;
+  presence_penalty: number;
+  repetition_penalty: number;
+  max_tokens: number;
+  anti_impersonation: boolean;
+  theme: 'dark' | 'light';
+}
+
