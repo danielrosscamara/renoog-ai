@@ -46,17 +46,32 @@ export const App: React.FC = () => {
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
   const activeTurns = activeChatId ? messageTurns[activeChatId] || [] : [];
 
-  // Active selected model resolution (syncs with Settings)
+  // Active selected provider & model resolution (syncs with Settings)
+  const activeProvider = (localStorage.getItem('renoog_llm_provider') || 'openrouter') as 'openrouter' | 'ollama' | 'custom';
+  const ollamaModel = localStorage.getItem('renoog_ollama_model') || 'llama3.2:3b';
+  const customModel = localStorage.getItem('renoog_custom_endpoint_url') ? 'custom-model' : 'local-model';
+  const openRouterModel = localStorage.getItem('renoog_model') || currentChat?.model_name || 'anthropic/claude-3.5-sonnet';
+
   const activeModel =
-    localStorage.getItem('renoog_model') || currentChat?.model_name || 'anthropic/claude-3.5-sonnet';
-  const displayModelName = activeModel.split('/')[1] || activeModel;
+    activeProvider === 'ollama'
+      ? ollamaModel
+      : activeProvider === 'custom'
+      ? customModel
+      : openRouterModel;
+
+  const displayModelName =
+    activeProvider === 'ollama'
+      ? `🦙 ${ollamaModel}`
+      : activeProvider === 'custom'
+      ? `⚡ ${customModel}`
+      : (activeModel.split('/')[1] || activeModel);
 
   // Model Context Limit Registry (True Hardware Context Limits)
   const getModelMaxTokens = (modelSlug: string): number => {
     const s = modelSlug.toLowerCase();
     if (s.includes('gemini-2') || s.includes('gemini-1.5')) return 1048576; // 1,000,000 (1M)
     if (s.includes('claude-3') || s.includes('claude-3-5')) return 200000;  // 200,000 (200k)
-    if (s.includes('llama-3') || s.includes('nemotron') || s.includes('mistral-large')) return 128000; // 128,000 (128k)
+    if (s.includes('llama-3') || s.includes('llama3') || s.includes('nemotron') || s.includes('mistral-large')) return 128000; // 128,000 (128k)
     if (s.includes('deepseek') || s.includes('qwen')) return 64000; // 64,000 (64k)
     return 8192; // Default 8,192 (8k)
   };
@@ -173,9 +188,15 @@ export const App: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                        className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all cursor-pointer truncate max-w-xs shadow-sm"
+                        className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition-all cursor-pointer truncate max-w-xs shadow-xs ${
+                          activeProvider === 'ollama'
+                            ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : activeProvider === 'custom'
+                            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        }`}
                       >
-                        <Bot className="w-3 h-3 text-indigo-400 shrink-0" />
+                        <Bot className="w-3 h-3 shrink-0" />
                         <span className="truncate">{displayModelName}</span>
                         <ChevronDown className="w-3 h-3 opacity-70 shrink-0" />
                       </button>
