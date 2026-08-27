@@ -10,7 +10,7 @@ import { CharacterStudio } from './components/studio/CharacterStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
-import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -40,6 +40,8 @@ export const App: React.FC = () => {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const [modelTab, setModelTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
 
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -76,24 +78,81 @@ export const App: React.FC = () => {
     return 8192; // Default 8,192 (8k)
   };
 
-  // Available models list for quick switcher (presets + user custom models)
-  const defaultPresets = [
-    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
-    { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (Free)' },
-    { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1' },
-    { id: 'mistralai/mistral-large-2407', name: 'Mistral Large' },
+  // Available models list for quick switcher (Categorized Local & Cloud)
+  interface QuickModelItem {
+    id: string;
+    name: string;
+    category: 'local' | 'cloud';
+    badge: string;
+    tagline: string;
+    isFree: boolean;
+  }
+
+  const QUICK_MODELS: QuickModelItem[] = [
+    // Local Ollama Models
+    { id: 'llama3.2:3b', name: 'Llama 3.2 3B', category: 'local', badge: 'GPU', tagline: 'Meta · 128k Context · Offline', isFree: true },
+    { id: 'qwen2.5-coder:1.5b', name: 'Qwen 2.5 Coder 1.5B', category: 'local', badge: 'GPU', tagline: 'Alibaba · Fast & Compact', isFree: true },
+    { id: 'qwen2.5:1.5b', name: 'Qwen 2.5 1.5B', category: 'local', badge: 'GPU', tagline: 'Alibaba · Storytelling', isFree: true },
+    { id: 'qwen2.5:3b', name: 'Qwen 2.5 3B', category: 'local', badge: 'GPU', tagline: 'Alibaba · High Nuance', isFree: true },
+    { id: 'mistral:7b', name: 'Mistral 7B', category: 'local', badge: 'GPU', tagline: 'Mistral · Narrative RP', isFree: true },
+    // Cloud OpenRouter Models
+    { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', category: 'cloud', badge: 'Cloud', tagline: 'Anthropic · Supreme Prose', isFree: false },
+    { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', category: 'cloud', badge: 'Cloud', tagline: 'Meta · High Immersion', isFree: false },
+    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', category: 'cloud', badge: 'Cloud', tagline: 'DeepSeek · Deep Reasoning', isFree: false },
+    { id: 'mistralai/mistral-large-2407', name: 'Mistral Large', category: 'cloud', badge: 'Cloud', tagline: 'Mistral · Creative Flow', isFree: false },
+    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash', category: 'cloud', badge: 'Free', tagline: 'Google · 1M Context Free', isFree: true },
+    { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B', category: 'cloud', badge: 'Free', tagline: 'Meta · Fast Free Tier', isFree: true },
   ];
 
-  let customPresets: Array<{ id: string; name: string }> = [];
+  let customModelPresets: Array<{ id: string; name: string }> = [];
   try {
     const raw = localStorage.getItem('renoog_custom_models');
-    if (raw) customPresets = JSON.parse(raw);
+    if (raw) customModelPresets = JSON.parse(raw);
   } catch {
     // ignore
   }
 
-  const allModels = [...defaultPresets, ...customPresets.filter((c) => !defaultPresets.some((p) => p.id === c.id))];
+  const allAvailableModels: QuickModelItem[] = [
+    ...QUICK_MODELS,
+    ...customModelPresets
+      .filter((c) => !QUICK_MODELS.some((p) => p.id === c.id))
+      .map((c) => ({
+        id: c.id,
+        name: c.name || c.id,
+        category: 'cloud' as const,
+        badge: 'Custom',
+        tagline: 'Custom User Added',
+        isFree: false,
+      })),
+  ];
+
+  const filteredQuickModels = allAvailableModels.filter((m) => {
+    const matchesSearch =
+      m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+      m.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
+      m.tagline.toLowerCase().includes(modelSearch.toLowerCase());
+    if (!matchesSearch) return false;
+    if (modelTab === 'local') return m.category === 'local';
+    if (modelTab === 'cloud') return m.category === 'cloud';
+    if (modelTab === 'free') return m.isFree;
+    return true;
+  });
+
+  const handleSelectQuickModel = (model: QuickModelItem) => {
+    if (model.category === 'local') {
+      localStorage.setItem('renoog_llm_provider', 'ollama');
+      localStorage.setItem('renoog_ollama_model', model.id);
+    } else {
+      localStorage.setItem('renoog_llm_provider', 'openrouter');
+      localStorage.setItem('renoog_model', model.id);
+    }
+    if (activeChatId) {
+      useChatStore.setState((state) => ({
+        chats: state.chats.map((c) => (c.id === activeChatId ? { ...c, model_name: model.id } : c)),
+      }));
+    }
+    setIsModelDropdownOpen(false);
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -202,47 +261,142 @@ export const App: React.FC = () => {
                       </button>
 
                       {isModelDropdownOpen && (
-                        <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl bg-[#18181b] border border-zinc-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.8)] p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                          <div className="flex items-center justify-between px-2 py-1 mb-1.5 border-b border-zinc-800 pb-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                              Active Model Engine
+                        <div className="absolute left-0 top-full mt-2 w-84 rounded-2xl bg-[#18181b] border border-zinc-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-3 z-50 animate-in fade-in zoom-in-95 duration-150 text-xs">
+                          {/* Header */}
+                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
+                            <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+                              Active Engine Switcher
                             </span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
-                              1-Click Switch
+                            <span
+                              className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                activeProvider === 'ollama'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                              }`}
+                            >
+                              {activeProvider === 'ollama' ? '🦙 GPU Local' : '🌐 Cloud API'}
                             </span>
                           </div>
 
-                          <div className="max-h-56 overflow-y-auto space-y-1 pr-1 [scrollbar-thin] [scrollbar-color:#3f3f46_transparent]">
-                            {allModels.map((m) => (
+                          {/* Search Input */}
+                          <div className="relative mb-2">
+                            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+                            <input
+                              type="text"
+                              value={modelSearch}
+                              onChange={(e) => setModelSearch(e.target.value)}
+                              placeholder="Search models (e.g. llama, claude, qwen)..."
+                              className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#121214] border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:border-indigo-500/60 outline-none"
+                            />
+                            {modelSearch && (
                               <button
-                                key={m.id}
                                 type="button"
-                                onClick={() => {
-                                  localStorage.setItem('renoog_model', m.id);
-                                  if (activeChatId) {
-                                    useChatStore.setState((state) => ({
-                                      chats: state.chats.map((c) =>
-                                        c.id === activeChatId ? { ...c, model_name: m.id } : c
-                                      ),
-                                    }));
-                                  }
-                                  setIsModelDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-colors ${
-                                  activeModel === m.id
-                                    ? 'bg-indigo-600/20 text-indigo-200 font-semibold border border-indigo-500/30'
-                                    : 'hover:bg-[#27272a] text-zinc-300'
+                                onClick={() => setModelSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Category Filter Tabs */}
+                          <div className="flex items-center gap-1 pb-2 mb-2 border-b border-zinc-800 overflow-x-auto scrollbar-none">
+                            {(
+                              [
+                                { id: 'all', label: 'All' },
+                                { id: 'local', label: '🦙 Local GPU' },
+                                { id: 'cloud', label: '🌐 Cloud' },
+                                { id: 'free', label: '✨ Free' },
+                              ] as const
+                            ).map((tab) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setModelTab(tab.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0 ${
+                                  modelTab === tab.id
+                                    ? 'bg-zinc-700 text-white shadow-xs'
+                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
                                 }`}
                               >
-                                <span className="truncate font-medium">{m.name || m.id}</span>
-                                {activeModel === m.id && (
-                                  <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                )}
+                                {tab.label}
                               </button>
                             ))}
                           </div>
 
-                          <div className="mt-2 pt-2 border-t border-zinc-800/80">
+                          {/* Filtered Models List */}
+                          <div className="max-h-60 overflow-y-auto space-y-1 pr-0.5 [scrollbar-thin] [scrollbar-color:#3f3f46_transparent]">
+                            {filteredQuickModels.length > 0 ? (
+                              filteredQuickModels.map((m) => {
+                                const isSelected = activeModel === m.id;
+                                return (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => handleSelectQuickModel(m)}
+                                    className={`w-full text-left p-2 rounded-xl transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                                      isSelected
+                                        ? m.category === 'local'
+                                          ? 'bg-emerald-600/20 text-emerald-200 border border-emerald-500/40 shadow-xs'
+                                          : 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/40 shadow-xs'
+                                        : 'hover:bg-[#202024] text-zinc-300 border border-transparent'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div
+                                        className={`p-1.5 rounded-lg shrink-0 ${
+                                          m.category === 'local'
+                                            ? 'bg-emerald-500/10 text-emerald-400'
+                                            : 'bg-indigo-500/10 text-indigo-400'
+                                        }`}
+                                      >
+                                        {m.category === 'local' ? (
+                                          <HardDrive className="w-3.5 h-3.5" />
+                                        ) : (
+                                          <Globe className="w-3.5 h-3.5" />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-semibold text-xs text-white truncate">
+                                            {m.name}
+                                          </span>
+                                          <span
+                                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold font-mono ${
+                                              m.badge === 'GPU'
+                                                ? 'bg-emerald-500/20 text-emerald-300'
+                                                : m.badge === 'Free'
+                                                ? 'bg-blue-500/20 text-blue-300'
+                                                : 'bg-purple-500/20 text-purple-300'
+                                            }`}
+                                          >
+                                            {m.badge}
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] text-zinc-500 truncate block">
+                                          {m.tagline}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {isSelected && (
+                                      <Check
+                                        className={`w-4 h-4 shrink-0 ${
+                                          m.category === 'local' ? 'text-emerald-400' : 'text-indigo-400'
+                                        }`}
+                                      />
+                                    )}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="text-center py-6 text-zinc-500 text-[11px]">
+                                No models matching &quot;{modelSearch}&quot;
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer link to full settings */}
+                          <div className="mt-2 pt-2 border-t border-zinc-800">
                             <button
                               type="button"
                               onClick={() => {
@@ -251,7 +405,7 @@ export const App: React.FC = () => {
                               }}
                               className="w-full text-center px-2 py-1.5 rounded-xl text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
                             >
-                              <span>⚙️ Manage Models in Settings</span>
+                              <span>⚙️ Open Full Settings & Providers</span>
                             </button>
                           </div>
                         </div>
