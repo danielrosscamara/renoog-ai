@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
-  Key,
   Eye,
   EyeOff,
   Sparkles,
@@ -20,8 +19,16 @@ import {
   ShieldCheck,
   AlertTriangle,
   ArrowRight,
+  Globe,
+  Server,
+  HardDrive,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
+import { api } from '../../services/api';
+import type { LLMProvider } from '../../types';
 
 interface ModelOption {
   id: string;
@@ -188,10 +195,31 @@ export const SettingsView: React.FC = () => {
   );
   const [activePreset, setActivePreset] = useState<string>('immersive');
 
+  // Provider state
+  const [provider, setProvider] = useState<LLMProvider>(() => {
+    return (localStorage.getItem('renoog_llm_provider') as LLMProvider) || 'openrouter';
+  });
+  const [ollamaUrl, setOllamaUrl] = useState(() => {
+    return localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434';
+  });
+  const [ollamaModel, setOllamaModel] = useState(() => {
+    return localStorage.getItem('renoog_ollama_model') || 'qwen2.5-coder:1.5b';
+  });
+  const [customEndpoint, setCustomEndpoint] = useState(() => {
+    return localStorage.getItem('renoog_custom_endpoint_url') || 'http://localhost:1234/v1';
+  });
+  const [ollamaTestStatus, setOllamaTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [ollamaModelsList, setOllamaModelsList] = useState<string[]>([]);
+  const [ollamaError, setOllamaError] = useState<string>('');
+
   // Baseline of saved settings to detect unsaved changes
   const [baseline, setBaseline] = useState(() => ({
+    provider: (localStorage.getItem('renoog_llm_provider') as LLMProvider) || 'openrouter',
     apiKey: (localStorage.getItem('renoog_api_key') || '').trim(),
     selectedModel: localStorage.getItem('renoog_model') || 'anthropic/claude-3.5-sonnet',
+    ollamaUrl: localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434',
+    ollamaModel: localStorage.getItem('renoog_ollama_model') || 'qwen2.5-coder:1.5b',
+    customEndpoint: localStorage.getItem('renoog_custom_endpoint_url') || 'http://localhost:1234/v1',
     temperature: parseFloat(localStorage.getItem('renoog_temp') || '0.90'),
     topP: parseFloat(localStorage.getItem('renoog_top_p') || '0.95'),
     repetitionPenalty: parseFloat(localStorage.getItem('renoog_rep_penalty') || '1.15'),
@@ -207,6 +235,14 @@ export const SettingsView: React.FC = () => {
   // Real-time diff calculation
   const diffs: Array<{ field: string; label: string; from: string; to: string }> = [];
 
+  if (provider !== baseline.provider) {
+    diffs.push({
+      field: 'provider',
+      label: 'Inference Provider',
+      from: baseline.provider.toUpperCase(),
+      to: provider.toUpperCase(),
+    });
+  }
   if (apiKey.trim() !== baseline.apiKey) {
     diffs.push({
       field: 'apiKey',
@@ -321,6 +357,22 @@ export const SettingsView: React.FC = () => {
     }, 800);
   };
 
+  const handleTestOllama = async () => {
+    setOllamaTestStatus('testing');
+    setOllamaError('');
+    const result = await api.testOllamaConnection(ollamaUrl);
+    if (result.ok) {
+      setOllamaTestStatus('success');
+      setOllamaModelsList(result.models);
+      if (result.models.length > 0 && !result.models.includes(ollamaModel)) {
+        setOllamaModel(result.models[0]);
+      }
+    } else {
+      setOllamaTestStatus('error');
+      setOllamaError(result.error || 'Connection failed');
+    }
+  };
+
   const handleAddCustomModel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customName.trim() || !customSlug.trim()) return;
@@ -358,8 +410,12 @@ export const SettingsView: React.FC = () => {
   };
 
   const persistSettings = () => {
+    localStorage.setItem('renoog_llm_provider', provider);
     localStorage.setItem('renoog_api_key', apiKey.trim());
     localStorage.setItem('renoog_model', selectedModel);
+    localStorage.setItem('renoog_ollama_url', ollamaUrl.trim());
+    localStorage.setItem('renoog_ollama_model', ollamaModel.trim());
+    localStorage.setItem('renoog_custom_endpoint_url', customEndpoint.trim());
     localStorage.setItem('renoog_temp', temperature.toString());
     localStorage.setItem('renoog_top_p', topP.toString());
     localStorage.setItem('renoog_rep_penalty', repetitionPenalty.toString());
@@ -369,8 +425,12 @@ export const SettingsView: React.FC = () => {
     localStorage.setItem('renoog_anti_impersonation', antiImpersonation.toString());
 
     setBaseline({
+      provider,
       apiKey: apiKey.trim(),
       selectedModel,
+      ollamaUrl: ollamaUrl.trim(),
+      ollamaModel: ollamaModel.trim(),
+      customEndpoint: customEndpoint.trim(),
       temperature,
       topP,
       repetitionPenalty,
@@ -394,8 +454,12 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleDiscardAndProceed = () => {
+    setProvider(baseline.provider);
     setApiKey(baseline.apiKey);
     setSelectedModel(baseline.selectedModel);
+    setOllamaUrl(baseline.ollamaUrl);
+    setOllamaModel(baseline.ollamaModel);
+    setCustomEndpoint(baseline.customEndpoint);
     setTemperature(baseline.temperature);
     setTopP(baseline.topP);
     setRepetitionPenalty(baseline.repetitionPenalty);
@@ -442,60 +506,242 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="max-w-5xl w-full mx-auto space-y-8 pb-12">
-        {/* Section 1: API Connection */}
-        <section className="p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl space-y-4">
-          <div className="flex items-center gap-2 text-base font-bold text-white pb-3 border-b border-[#27272a]">
-            <Key className="w-5 h-5 text-indigo-400" />
-            <span>API Engine & Connection</span>
+        {/* Section 1: Inference Provider & Connection */}
+        <section className="p-6 rounded-2xl bg-[#18181b] border border-[#27272a] shadow-xl space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
+            <div className="flex items-center gap-2 text-base font-bold text-white">
+              <Server className="w-5 h-5 text-indigo-400" />
+              <span>AI Inference Provider</span>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+              Active: {provider.toUpperCase()}
+            </span>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-              OpenRouter API Key
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-xl bg-[#121214] border border-[#27272a] focus:border-indigo-500/60 font-mono text-zinc-200 placeholder-zinc-500 outline-none transition-colors"
-                />
+          {/* Provider Selection Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* OpenRouter */}
+            <div
+              onClick={() => setProvider('openrouter')}
+              className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                provider === 'openrouter'
+                  ? 'bg-indigo-600/15 border-indigo-500/80 ring-1 ring-indigo-500/30'
+                  : 'bg-[#121214] border-[#27272a] hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className={`p-2 rounded-lg ${provider === 'openrouter' ? 'bg-indigo-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">OpenRouter</h4>
+                  <span className="text-[10px] text-zinc-400">Cloud API (Claude, Llama)</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-500">Requires OpenRouter API key. Access 200+ frontier models.</p>
+            </div>
+
+            {/* Ollama Local */}
+            <div
+              onClick={() => setProvider('ollama')}
+              className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                provider === 'ollama'
+                  ? 'bg-emerald-600/15 border-emerald-500/80 ring-1 ring-emerald-500/30'
+                  : 'bg-[#121214] border-[#27272a] hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className={`p-2 rounded-lg ${provider === 'ollama' ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Ollama Local</h4>
+                  <span className="text-[10px] text-emerald-400 font-semibold">100% Free & Offline</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-500">Zero cost, private local inference on your GPU with no API keys.</p>
+            </div>
+
+            {/* Custom Endpoint */}
+            <div
+              onClick={() => setProvider('custom')}
+              className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                provider === 'custom'
+                  ? 'bg-amber-600/15 border-amber-500/80 ring-1 ring-amber-500/30'
+                  : 'bg-[#121214] border-[#27272a] hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className={`p-2 rounded-lg ${provider === 'custom' ? 'bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Custom Server</h4>
+                  <span className="text-[10px] text-zinc-400">LM Studio / vLLM</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-500">Any OpenAI-compatible server endpoint running on your machine.</p>
+            </div>
+          </div>
+
+          {/* Conditional Provider Settings Panel */}
+          {provider === 'openrouter' && (
+            <div className="pt-2 space-y-3">
+              <label className="block text-xs font-semibold text-zinc-300">
+                OpenRouter API Key
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-xl bg-[#121214] border border-[#27272a] focus:border-indigo-500/60 font-mono text-zinc-200 placeholder-zinc-500 outline-none transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+                  >
+                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+                  onClick={handleTestKey}
+                  disabled={!apiKey.trim() || testStatus === 'testing'}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#27272a] hover:bg-[#323236] text-xs font-semibold text-zinc-200 transition-colors disabled:opacity-40 shrink-0"
                 >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {testStatus === 'testing' ? (
+                    <span>Testing...</span>
+                  ) : testStatus === 'success' ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400">Valid Key</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <span>Test Key</span>
+                    </>
+                  )}
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleTestKey}
-                disabled={!apiKey.trim() || testStatus === 'testing'}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#27272a] hover:bg-[#323236] text-xs font-semibold text-zinc-200 transition-colors disabled:opacity-40 shrink-0"
-              >
-                {testStatus === 'testing' ? (
-                  <span>Testing...</span>
-                ) : testStatus === 'success' ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400">Valid Key</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    <span>Test Key</span>
-                  </>
-                )}
-              </button>
             </div>
-            <p className="text-[11px] text-zinc-500 mt-2">
-              Keys are stored securely in your local browser storage and sent directly to OpenRouter via encrypted HTTPS.
-            </p>
-          </div>
+          )}
+
+          {provider === 'ollama' && (
+            <div className="pt-2 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    Ollama Server URL
+                  </label>
+                  <input
+                    type="text"
+                    value={ollamaUrl}
+                    onChange={(e) => setOllamaUrl(e.target.value)}
+                    placeholder="http://localhost:11434"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#121214] border border-[#27272a] focus:border-emerald-500/60 font-mono text-zinc-200 placeholder-zinc-500 outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    Local Model Slug (e.g. qwen2.5-coder:1.5b)
+                  </label>
+                  <input
+                    type="text"
+                    value={ollamaModel}
+                    onChange={(e) => setOllamaModel(e.target.value)}
+                    placeholder="qwen2.5-coder:1.5b"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#121214] border border-[#27272a] focus:border-emerald-500/60 font-mono text-zinc-200 placeholder-zinc-500 outline-none transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Test Ollama Connection */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestOllama}
+                  disabled={ollamaTestStatus === 'testing'}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-semibold transition-all disabled:opacity-50"
+                >
+                  {ollamaTestStatus === 'testing' ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Pinging Ollama...</span>
+                    </>
+                  ) : (
+                    <>
+                      <HardDrive className="w-3.5 h-3.5" />
+                      <span>Test Ollama Connection</span>
+                    </>
+                  )}
+                </button>
+
+                {ollamaTestStatus === 'success' && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Connected to Ollama! Found {ollamaModelsList.length} local model{ollamaModelsList.length === 1 ? '' : 's'}.</span>
+                  </div>
+                )}
+
+                {ollamaTestStatus === 'error' && (
+                  <div className="flex items-center gap-1.5 text-xs text-red-400 font-semibold animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-red-400" />
+                    <span>{ollamaError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Discovered Models Tags */}
+              {ollamaModelsList.length > 0 && (
+                <div className="p-3 rounded-xl bg-[#121214] border border-[#27272a] space-y-2">
+                  <span className="text-[11px] font-semibold text-zinc-400 block">
+                    Installed Ollama Models (Click to Select):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {ollamaModelsList.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setOllamaModel(m)}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono transition-all ${
+                          ollamaModel === m
+                            ? 'bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20'
+                            : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {provider === 'custom' && (
+            <div className="pt-2 space-y-3">
+              <label className="block text-xs font-semibold text-zinc-300">
+                Custom OpenAI-Compatible Endpoint URL
+              </label>
+              <input
+                type="text"
+                value={customEndpoint}
+                onChange={(e) => setCustomEndpoint(e.target.value)}
+                placeholder="http://localhost:1234/v1"
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#121214] border border-[#27272a] focus:border-amber-500/60 font-mono text-zinc-200 placeholder-zinc-500 outline-none transition-colors"
+              />
+              <p className="text-[11px] text-zinc-500">
+                Compatible with LM Studio, vLLM, Text Generation WebUI, or any OpenAI-compatible server.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Section 2: Model Selection Grid */}
