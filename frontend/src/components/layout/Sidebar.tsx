@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Chat } from '../../types';
+import { SidebarChatSkeleton } from '../common/Skeleton';
 
 // ─── Context Menu ───────────────────────────────────────────────────────────
 interface ChatContextMenuProps {
@@ -151,6 +152,7 @@ const ChatItem: React.FC<ChatItemProps> = ({
 export const Sidebar: React.FC = () => {
   const {
     chats,
+    isLoading,
     characters,
     personas,
     activeChatId,
@@ -308,6 +310,13 @@ export const Sidebar: React.FC = () => {
 
       {/* Zone 4B: Scrollable Chat Lists */}
       <div className="flex-1 overflow-y-auto px-3 pb-2 space-y-1">
+        {isLoading && chats.length === 0 && (
+          <div className="space-y-2 py-1">
+            <SidebarChatSkeleton />
+            <SidebarChatSkeleton />
+            <SidebarChatSkeleton />
+          </div>
+        )}
 
         {/* Pinned Chats */}
         {pinnedChats.length > 0 && (
