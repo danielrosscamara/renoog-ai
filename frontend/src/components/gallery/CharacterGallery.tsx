@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Search, MessageSquare, Sparkles, Tag, Plus, Upload, Download, Loader2, AlertCircle, CheckCircle2, X, Edit3, Image as ImageIcon } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Character } from '../../types';
+import { CharacterCardSkeleton } from '../common/Skeleton';
 
 const GENRE_TAGS = [
   'All',
@@ -32,6 +33,7 @@ const AVAILABLE_PILL_TAGS = [
 export const CharacterGallery: React.FC = () => {
   const {
     characters,
+    isLoading,
     createNewChat,
     importCharacterPng,
     exportCharacterPng,
@@ -346,7 +348,13 @@ export const CharacterGallery: React.FC = () => {
 
       {/* Character Cards Grid */}
       <div className="max-w-7xl w-full mx-auto pb-12">
-        {filteredCharacters.length > 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <CharacterCardSkeleton key={`gallery-skeleton-${i}`} />
+            ))}
+          </div>
+        ) : filteredCharacters.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredCharacters.map((character: Character) => (
               <div
