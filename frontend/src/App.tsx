@@ -43,23 +43,6 @@ export const App: React.FC = () => {
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [modelTab, setModelTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
-  const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
-    const stored = localStorage.getItem('renoog_ollama_model');
-    return stored ? [stored] : [];
-  });
-
-  // Live auto-discovery of locally installed Ollama models
-  useEffect(() => {
-    if (isModelDropdownOpen || activeProvider === 'ollama') {
-      const ollamaUrl = localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434';
-      api.testOllamaConnection(ollamaUrl).then((res) => {
-        if (res.ok && res.models) {
-          setInstalledOllamaModels(res.models);
-        }
-      });
-    }
-  }, [isModelDropdownOpen, activeProvider]);
-
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
@@ -84,6 +67,23 @@ export const App: React.FC = () => {
       : activeProvider === 'custom'
       ? `⚡ ${customModel}`
       : (activeModel.split('/')[1] || activeModel);
+
+  const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
+    const stored = localStorage.getItem('renoog_ollama_model');
+    return stored ? [stored] : [];
+  });
+
+  // Live auto-discovery of locally installed Ollama models
+  useEffect(() => {
+    if (isModelDropdownOpen || activeProvider === 'ollama') {
+      const ollamaUrl = localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434';
+      api.testOllamaConnection(ollamaUrl).then((res) => {
+        if (res.ok && res.models) {
+          setInstalledOllamaModels(res.models);
+        }
+      });
+    }
+  }, [isModelDropdownOpen, activeProvider]);
 
   // Model Context Limit Registry (True Hardware Context Limits)
   const getModelMaxTokens = (modelSlug: string): number => {
