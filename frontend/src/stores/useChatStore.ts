@@ -82,6 +82,38 @@ const getStoredGenerationSamplers = (activePersonaName?: string) => {
   };
 };
 
+// Helper: Safely parses stored JSON app settings without dead store assignments
+const getStoredSettings = (): Record<string, unknown> => {
+  try {
+    const raw = localStorage.getItem('renoog_app_settings');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+// Helper: Resolves active provider (openrouter, ollama, custom), keys, and model overrides
+const getStoredProviderConfig = () => {
+  const settingsObj = getStoredSettings();
+
+  const provider = (localStorage.getItem('renoog_llm_provider') || (typeof settingsObj.provider === 'string' ? settingsObj.provider : 'openrouter')) as 'openrouter' | 'ollama' | 'custom';
+  const apiKey = localStorage.getItem('renoog_api_key') || (typeof settingsObj.openrouter_api_key === 'string' ? settingsObj.openrouter_api_key : '') || (typeof settingsObj.apiKey === 'string' ? settingsObj.apiKey : '');
+  const ollamaUrl = localStorage.getItem('renoog_ollama_url') || (typeof settingsObj.ollama_base_url === 'string' ? settingsObj.ollama_base_url : 'http://localhost:11434');
+  const ollamaModel = localStorage.getItem('renoog_ollama_model') || (typeof settingsObj.ollama_model === 'string' ? settingsObj.ollama_model : 'qwen2.5-coder:1.5b');
+  const customUrl = localStorage.getItem('renoog_custom_endpoint_url') || (typeof settingsObj.custom_endpoint_url === 'string' ? settingsObj.custom_endpoint_url : 'http://localhost:1234/v1');
+  const openRouterModel = localStorage.getItem('renoog_model') || (typeof settingsObj.selected_model === 'string' ? settingsObj.selected_model : '') || (typeof settingsObj.selectedModel === 'string' ? settingsObj.selectedModel : '') || 'anthropic/claude-3.5-sonnet';
+
+  const effectiveModel = provider === 'ollama' ? ollamaModel : provider === 'custom' ? 'local-model' : openRouterModel;
+  const endpointUrl = provider === 'ollama' ? ollamaUrl : provider === 'custom' ? customUrl : undefined;
+
+  return {
+    provider,
+    apiKey,
+    endpointUrl,
+    effectiveModel,
+  };
+};
+
 export const useChatStore = create<ChatState>((set, get) => ({
   characters: [],
   personas: [],
@@ -259,26 +291,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       persona_id: get().activePersonaId,
     };
 
-    const storedApiKey =
-      localStorage.getItem('renoog_api_key') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
-        } catch {
-          return '';
-        }
-      })();
-
-    const storedModel =
-      localStorage.getItem('renoog_model') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
-        } catch {
-          return '';
-        }
-      })() || 'anthropic/claude-3.5-sonnet';
-
+    const providerConfig = getStoredProviderConfig();
+    const storedModel = providerConfig.effectiveModel;
+    const storedApiKey = providerConfig.apiKey;
     const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
 
     const assistantTurnPlaceholder: MessageTurn = {
@@ -317,6 +332,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatId,
       userMessage: text,
       modelName: storedModel || undefined,
+      provider: providerConfig.provider,
+      endpointUrl: providerConfig.endpointUrl,
       temperature: storedTemp,
       topP: samplers.topP,
       frequencyPenalty: samplers.frequencyPenalty,
@@ -404,26 +421,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
-    const storedApiKey =
-      localStorage.getItem('renoog_api_key') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
-        } catch {
-          return '';
-        }
-      })();
-
-    const storedModel =
-      localStorage.getItem('renoog_model') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
-        } catch {
-          return '';
-        }
-      })();
-
+    const providerConfig = getStoredProviderConfig();
+    const storedModel = providerConfig.effectiveModel;
+    const storedApiKey = providerConfig.apiKey;
     const storedTemp = parseFloat(localStorage.getItem('renoog_temp') || '0.90');
 
     const activePersona = get().personas.find((p) => p.id === get().activePersonaId);
@@ -433,6 +433,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatId,
       userMessage: userPrompt,
       modelName: storedModel || undefined,
+      provider: providerConfig.provider,
+      endpointUrl: providerConfig.endpointUrl,
       temperature: storedTemp,
       topP: samplers.topP,
       frequencyPenalty: samplers.frequencyPenalty,
