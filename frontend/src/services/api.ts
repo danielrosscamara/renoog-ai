@@ -195,6 +195,8 @@ export const api = {
     maxTokens,
     stopSequences,
     apiKey,
+    provider = 'openrouter',
+    endpointUrl,
     onToken,
     onDone,
     onError,
@@ -210,6 +212,8 @@ export const api = {
     maxTokens?: number;
     stopSequences?: string[];
     apiKey?: string;
+    provider?: 'openrouter' | 'ollama' | 'custom';
+    endpointUrl?: string;
     onToken: (token: string) => void;
     onDone: (
       turnId: string,
@@ -240,6 +244,8 @@ export const api = {
           repetition_penalty: repetitionPenalty,
           max_tokens: maxTokens,
           stop: stopSequences,
+          provider,
+          endpoint_url: endpointUrl,
         }),
       });
 
@@ -320,5 +326,20 @@ export const api = {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  },
+
+  // Local Ollama Health & Model Discovery
+  async testOllamaConnection(baseUrl = 'http://localhost:11434'): Promise<{ ok: boolean; models: string[]; error?: string }> {
+    try {
+      const cleanUrl = baseUrl.replace(/\/+$/, '');
+      const res = await fetch(`${cleanUrl}/api/tags`, { method: 'GET' });
+      if (!res.ok) throw new Error(`Ollama responded with status ${res.status}`);
+      const data = await res.json();
+      const models: string[] = (data.models || []).map((m: { name: string }) => m.name);
+      return { ok: true, models };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not connect to Ollama server';
+      return { ok: false, models: [], error: message };
+    }
   },
 };
