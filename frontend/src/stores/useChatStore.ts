@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { Character, Persona, Chat, MessageTurn, ViewType } from '../types';
 import { api } from '../services/api';
-import { MOCK_CHARACTERS, MOCK_PERSONAS, MOCK_CHATS, MOCK_MESSAGE_TURNS } from '../data/mockData';
 
 export interface ChatState {
   characters: Character[];
@@ -84,17 +83,17 @@ const getStoredGenerationSamplers = (activePersonaName?: string) => {
 };
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  characters: MOCK_CHARACTERS,
-  personas: MOCK_PERSONAS,
-  chats: MOCK_CHATS,
-  messageTurns: MOCK_MESSAGE_TURNS,
+  characters: [],
+  personas: [],
+  chats: [],
+  messageTurns: {},
   activeChatId: localStorage.getItem('renoog_last_chat_id') || null,
   activeCharacterId: localStorage.getItem('renoog_last_char_id') || null,
-  activePersonaId: 'persona_adventurer',
+  activePersonaId: '',
   activeView: (localStorage.getItem('renoog_last_view') as ViewType) || 'chat',
   isSidebarOpen: true,
   isStreaming: false,
-  isLoading: false,
+  isLoading: true,
   streamingError: null,
   exactTokenUsage: {},
   hasUnsavedSettings: false,
@@ -117,10 +116,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const defaultPersona = personas.find((p) => p.is_default) || personas[0];
 
       set({
-        characters: characters.length > 0 ? characters : get().characters,
-        personas: personas.length > 0 ? personas : get().personas,
-        chats: chats.length > 0 ? chats : get().chats,
-        activePersonaId: defaultPersona ? defaultPersona.id : get().activePersonaId,
+        characters,
+        personas,
+        chats,
+        activePersonaId: defaultPersona ? defaultPersona.id : (personas[0]?.id || ''),
         activeView: savedView,
         isLoading: false,
       });
