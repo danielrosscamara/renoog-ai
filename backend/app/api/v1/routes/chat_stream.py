@@ -21,6 +21,8 @@ class StreamChatRequest(BaseModel):
     chat_id: str = Field(..., description="Active chat session ID")
     user_message: str = Field(..., description="User roleplay message input")
     model_name: str | None = Field(None, description="Optional LLM slug override")
+    provider: str | None = Field("openrouter", description="Inference provider: openrouter, ollama, custom")
+    endpoint_url: str | None = Field(None, description="Optional custom endpoint URL for local Ollama/LM Studio")
     temperature: float | None = Field(None, ge=0.0, le=2.0)
     top_p: float | None = Field(None, ge=0.0, le=1.0)
     frequency_penalty: float | None = Field(None, ge=-2.0, le=2.0)
@@ -29,12 +31,14 @@ class StreamChatRequest(BaseModel):
     max_tokens: int | None = Field(None, ge=1, le=8192)
     stop: list[str] | None = Field(None, description="Stop sequences to halt generation")
 
-async def stream_openrouter_generator(
+async def stream_chat_completion_generator(
     chat_id: str,
     payload_messages: list[dict],
     model_name: str,
     temperature: float,
-    api_key: str,
+    provider: str = "openrouter",
+    api_key: str | None = None,
+    endpoint_url: str | None = None,
     top_p: float | None = None,
     frequency_penalty: float | None = None,
     presence_penalty: float | None = None,
@@ -42,16 +46,46 @@ async def stream_openrouter_generator(
     max_tokens: int | None = None,
     stop: list[str] | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Connects to OpenRouter API and streams tokens as Server-Sent Events."""
+    """Connects to OpenRouter or Local Ollama/Custom API and streams tokens as Server-Sent Events."""
     full_response_text = ""
 
-    openrouter_url = f"{settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "http://localhost:5173",
-        "X-Title": "Renoog AI Roleplay Engine",
-        "Content-Type": "application/json",
-    }
+    # 1. Resolve Target URL and Headers based on Provider
+    if provider == "ollama":
+        base = (endpoint_url or "http://localhost:11434").rstrip("/")
+        if not base.endswith("/v1") and not base.endswith("/chat/completions"):
+            target_url = f"{base}/v1/chat/completions"
+        elif base.endswith("/v1"):
+            target_url = f"{base}/chat/completions"
+        else:
+            target_url = base
+
+        headers = {
+            "Content-Type": "application/json",
+        }
+        logger.info(f"[STREAM] 🦙 Connecting to Local Ollama URL={target_url} | Model='{model_name}'")
+
+    elif provider == "custom":
+        base = (endpoint_url or "http://localhost:1234/v1").rstrip("/")
+        target_url = f"{base}/chat/completions" if not base.endswith("/chat/completions") else base
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        logger.info(f"[STREAM] ⚡ Connecting to Custom Local Endpoint URL={target_url} | Model='{model_name}'")
+
+    else:
+        # Default: OpenRouter
+        target_url = f"{settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key or ''}",
+            "HTTP-Referer": "http://localhost:5173",
+            "X-Title": "Renoog AI Roleplay Engine",
+            "Content-Type": "application/json",
+        }
+        masked_key = f"{api_key[:8]}...{api_key[-4:]}" if api_key and len(api_key) > 12 else "***"
+        logger.info(f"[STREAM] 🌐 Connecting to OpenRouter URL={target_url} | Model='{model_name}' | Key={masked_key}")
+
     body: dict = {
         "model": model_name,
         "messages": payload_messages,
@@ -71,22 +105,19 @@ async def stream_openrouter_generator(
     if stop:
         body["stop"] = stop
 
-    masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else "***"
-    logger.info(f"[STREAM] 🚀 Connecting to OpenRouter URL={openrouter_url} | Model='{model_name}' | Key={masked_key}")
-
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            async with client.stream("POST", openrouter_url, headers=headers, json=body) as response:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", target_url, headers=headers, json=body) as response:
                 if response.status_code != 200:
                     err_body = (await response.aread()).decode("utf-8", errors="ignore")
-                    logger.error(f"[STREAM] ❌ OpenRouter HTTP {response.status_code} Error: {err_body}")
+                    logger.error(f"[STREAM] ❌ Provider HTTP {response.status_code} Error: {err_body}")
                     yield json.dumps({
                         "event": "error",
-                        "error": f"OpenRouter HTTP {response.status_code}: {err_body}"
+                        "error": f"Provider HTTP {response.status_code}: {err_body}"
                     })
                     return
 
-                logger.info(f"[STREAM] 🟢 OpenRouter 200 OK. Streaming tokens for chat '{chat_id}'...")
+                logger.info(f"[STREAM] 🟢 {provider.upper()} 200 OK. Streaming tokens for chat '{chat_id}'...")
                 token_count = 0
                 prompt_tokens = 0
                 completion_tokens = 0
@@ -107,7 +138,7 @@ async def stream_openrouter_generator(
                                 full_response_text += delta
                                 yield json.dumps({"event": "token", "token": delta})
 
-                            # Capture OpenRouter server-calculated usage statistics
+                            # Capture server-calculated usage statistics if provided
                             usage = chunk.get("usage")
                             if usage:
                                 prompt_tokens = usage.get("prompt_tokens", 0)
@@ -152,17 +183,19 @@ async def stream_chat_response(
     db: AsyncSession = Depends(get_db)
 ):
     """Initiates an SSE token stream for roleplay conversation turns."""
-    # Resolve OpenRouter API Key
+    provider = req.provider or "openrouter"
     api_key = x_openrouter_key or getattr(settings, "OPENROUTER_API_KEY", None)
 
-    logger.info(f"[STREAM] 📨 Incoming stream request for chat_id='{req.chat_id}', message='{req.user_message[:30]}...'")
+    logger.info(f"[STREAM] 📨 Incoming stream request for chat_id='{req.chat_id}', provider='{provider}', message='{req.user_message[:30]}...'")
 
-    if not api_key or api_key.startswith("sk-or-v1-xxx"):
-        logger.error("[STREAM] ❌ Rejected: OpenRouter API Key not provided or placeholder!")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="OpenRouter API Key not provided. Please paste your key in Settings (⚙️) or headers."
-        )
+    # Only enforce API key if provider is OpenRouter
+    if provider == "openrouter":
+        if not api_key or api_key.startswith("sk-or-v1-xxx"):
+            logger.error("[STREAM] ❌ Rejected: OpenRouter API Key not provided or placeholder!")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="OpenRouter API Key not provided. Please paste your key in Settings (⚙️) or switch to Local Ollama."
+            )
 
     # 1. Fetch Chat & Character
     stmt = select(ChatModel).options(selectinload(ChatModel.turns)).where(ChatModel.id == req.chat_id)
@@ -199,20 +232,24 @@ async def stream_chat_response(
     existing_turns: list[MessageTurnModel] = [*raw_turns, user_turn]
     compiled_messages = compile_prompt_payload(character, persona, existing_turns)
 
-    target_model = req.model_name or getattr(chat, "model_name", None) or settings.DEFAULT_MODEL
+    target_model = req.model_name or getattr(chat, "model_name", None) or (
+        "qwen2.5-coder:1.5b" if provider == "ollama" else settings.DEFAULT_MODEL
+    )
     target_temp = req.temperature if req.temperature is not None else float(getattr(chat, "temperature", 0.90))
 
     logger.info(
-        f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Target Model='{target_model}' | Temp={target_temp} | RepPenalty={req.repetition_penalty} | MaxTokens={req.max_tokens}"
+        f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Provider='{provider}' | Target Model='{target_model}' | Temp={target_temp} | RepPenalty={req.repetition_penalty} | MaxTokens={req.max_tokens}"
     )
 
     return EventSourceResponse(
-        stream_openrouter_generator(
+        stream_chat_completion_generator(
             chat_id=req.chat_id,
             payload_messages=compiled_messages,
             model_name=str(target_model),
             temperature=target_temp,
+            provider=provider,
             api_key=api_key,
+            endpoint_url=req.endpoint_url,
             top_p=req.top_p,
             frequency_penalty=req.frequency_penalty,
             presence_penalty=req.presence_penalty,
@@ -221,3 +258,4 @@ async def stream_chat_response(
             stop=req.stop,
         )
     )
+
