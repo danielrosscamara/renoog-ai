@@ -8,12 +8,14 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { CharacterStudio } from './components/studio/CharacterStudio';
 import { PromptInspector } from './components/chat/PromptInspector';
+import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
 import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
     activeChatId,
+    isLoading,
     chats,
     characters,
     personas,
@@ -407,7 +409,9 @@ export const App: React.FC = () => {
 
             {/* Scrollable Message List */}
             <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
-              {activeTurns.map((turn) => {
+              {isLoading && activeTurns.length === 0 ? (
+                <ChatTurnSkeleton />
+              ) : activeTurns.map((turn) => {
                 const authorPersonaId = turn.persona_id || currentChat?.persona_id || activePersonaId;
                 const turnPersona = personas.find((p) => p.id === authorPersonaId) || currentPersona;
                 return (
