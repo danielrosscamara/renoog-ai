@@ -96,36 +96,48 @@ async def seed_database():
             )
             session.add(chat)
 
-            # Seed Turns
-            t1 = MessageTurnModel(
-                id="turn_1",
-                chat_id="chat_lyra_01",
-                role="assistant",
-                active_index=0,
-                swipes=[
+        # 4. Seed Starter Turns (Idempotent: verifies turn ID does not already exist)
+        seed_turns = [
+            (
+                "turn_1",
+                "assistant",
+                0,
+                [
                     "*looks up from the ancient brass astrolabe, adjusting her copper-rimmed spectacles as your footsteps echo across the stone floor.* \n\n\"Careful where you step, traveler. A single misplaced foot in this observatory could send you ten minutes into yesterday. What brings you to the Clocktower?\"",
                     "*glances up sharply from a floating sphere of golden clockwork gears, raising a brow with quiet curiosity.* \n\n\"An unexpected guest. You're either remarkably brave or completely lost. Speak quickly—the temporal field here is unstable.\"",
                 ],
-            )
-            t2 = MessageTurnModel(
-                id="turn_2",
-                chat_id="chat_lyra_01",
-                role="user",
-                active_index=0,
-                swipes=["I was sent to investigate the sudden time distortions rippling through the lower valley."],
-            )
-            t3 = MessageTurnModel(
-                id="turn_3",
-                chat_id="chat_lyra_01",
-                role="assistant",
-                active_index=0,
-                swipes=[
+            ),
+            (
+                "turn_2",
+                "user",
+                0,
+                ["I was sent to investigate the sudden time distortions rippling through the lower valley."],
+            ),
+            (
+                "turn_3",
+                "assistant",
+                0,
+                [
                     "*sighs softly, placing a delicate brass tuning fork onto the mahogany table. She gestures toward a glowing crack in the air beside her.* \n\n\"Then you have already felt them. The resonance is accelerating. Someone shattered the second seal in the subterranean vaults beneath us.\"",
                     "*frowns thoughtfully, her fingers tracing glowing silver runes that pulse along the observatory's stone walls.* \n\n\"The valley too? It's spreading faster than I calculated. Look here—the localized timeline is already beginning to fray at the edges.\"",
                     "*crosses her arms and tilts her head, evaluating your words with a sharp gaze.* \n\n\"So the guild finally noticed. I told them months ago the pendulum was swinging out of alignment. If you intend to help, we don't have much time.\"",
                 ],
-            )
-            session.add_all([t1, t2, t3])
+            ),
+        ]
+
+        for turn_id, role, active_idx, swipes in seed_turns:
+            t_stmt = select(MessageTurnModel).where(MessageTurnModel.id == turn_id)
+            existing_turn = (await session.execute(t_stmt)).scalar_one_or_none()
+            if not existing_turn:
+                session.add(
+                    MessageTurnModel(
+                        id=turn_id,
+                        chat_id="chat_lyra_01",
+                        role=role,
+                        active_index=active_idx,
+                        swipes=swipes,
+                    )
+                )
 
         await session.commit()
         print("Database seeded successfully with characters, personas, and chats!")
