@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
+import { RightSidebar } from './components/layout/RightSidebar';
 import { MessageBubble } from './components/chat/MessageBubble';
 import { ChatInputBar } from './components/chat/ChatInputBar';
 import { CharacterGallery } from './components/gallery/CharacterGallery';
@@ -11,7 +12,7 @@ import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
 import { api } from './services/api';
-import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe, Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -36,6 +37,8 @@ export const App: React.FC = () => {
     rerollUserMessage,
     generateGhostwriterSuggestion,
     exactTokenUsage,
+    isRightSidebarOpen,
+    toggleRightSidebar,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -613,105 +616,134 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsInspectorOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm cursor-pointer"
+                  title="Inspect compiled 6-layer prompt payload"
                 >
                   <Brain className="w-4 h-4 text-indigo-400" />
                   <span className="hidden sm:inline">Inspect Prompt</span>
                 </button>
+
+                {/* 3rd Column Companion HUD Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleRightSidebar}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    isRightSidebarOpen
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                      : 'bg-[#202024] hover:bg-[#27272a] border-[#2e2e36] text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title={isRightSidebarOpen ? 'Close Companion HUD' : 'Open Companion HUD (AI Thoughts & Memory)'}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">{isRightSidebarOpen ? 'HUD Open' : 'HUD'}</span>
+                </button>
               </div>
             </header>
 
-            {/* Scrollable Message List */}
-            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
-              {isLoading && activeTurns.length === 0 ? (
-                <ChatTurnSkeleton />
-              ) : activeTurns.map((turn) => {
-                const authorPersonaId = turn.persona_id || currentChat?.persona_id || activePersonaId;
-                const turnPersona = personas.find((p) => p.id === authorPersonaId) || currentPersona;
-                return (
-                  <MessageBubble
-                    key={turn.id}
-                    turn={turn}
-                    character={currentChar}
-                    persona={turnPersona}
-                    onSwipeChange={(turnId, newIndex) => {
-                      if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
-                    }}
-                    onReroll={(turnId) => {
-                      if (activeChatId) {
-                        if (turn.role === 'user') {
-                          rerollUserMessage(activeChatId, turnId);
-                        } else {
-                          rerollMessage(activeChatId, turnId);
-                        }
-                      }
-                    }}
-                    onEdit={(turnId, newText) => {
-                      if (activeChatId) editTurnMessage(activeChatId, turnId, newText);
-                    }}
-                    onPin={(turnId) => {
-                      if (activeChatId) togglePinTurn(activeChatId, turnId);
-                    }}
-                    onDelete={(turnId) => {
-                      if (activeChatId) deleteTurn(activeChatId, turnId);
-                    }}
-                  />
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Streaming Error Alert Banner */}
-            {streamingError && (
-              <div className="md:mx-8 mb-2 max-w-4xl w-full mx-auto p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <span className="truncate">{streamingError}</span>
+            {/* Center Chat + Right Sidebar Layout Container */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Scrollable Message List */}
+                <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
+                  {isLoading && activeTurns.length === 0 ? (
+                    <ChatTurnSkeleton />
+                  ) : activeTurns.map((turn) => {
+                    const authorPersonaId = turn.persona_id || currentChat?.persona_id || activePersonaId;
+                    const turnPersona = personas.find((p) => p.id === authorPersonaId) || currentPersona;
+                    return (
+                      <MessageBubble
+                        key={turn.id}
+                        turn={turn}
+                        character={currentChar}
+                        persona={turnPersona}
+                        onSwipeChange={(turnId, newIndex) => {
+                          if (activeChatId) setSwipeIndex(activeChatId, turnId, newIndex);
+                        }}
+                        onReroll={(turnId) => {
+                          if (activeChatId) {
+                            if (turn.role === 'user') {
+                              rerollUserMessage(activeChatId, turnId);
+                            } else {
+                              rerollMessage(activeChatId, turnId);
+                            }
+                          }
+                        }}
+                        onEdit={(turnId, newText) => {
+                          if (activeChatId) editTurnMessage(activeChatId, turnId, newText);
+                        }}
+                        onPin={(turnId) => {
+                          if (activeChatId) togglePinTurn(activeChatId, turnId);
+                        }}
+                        onDelete={(turnId) => {
+                          if (activeChatId) deleteTurn(activeChatId, turnId);
+                        }}
+                      />
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* 1-Click Retry Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeChatId) retryLastMessage(activeChatId);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition-colors flex items-center gap-1 shadow-sm"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Retry</span>
-                  </button>
 
-                  {streamingError.toLowerCase().includes('key') && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('settings')}
-                      className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 font-semibold text-[11px] transition-colors"
-                    >
-                      Open Settings
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => useChatStore.setState({ streamingError: null })}
-                    className="p-1 rounded-md hover:bg-red-500/20 text-red-400 hover:text-red-200 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {/* Streaming Error Alert Banner */}
+                {streamingError && (
+                  <div className="md:mx-8 mb-2 max-w-4xl w-full mx-auto p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <span className="truncate">{streamingError}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* 1-Click Retry Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeChatId) retryLastMessage(activeChatId);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition-colors flex items-center gap-1 shadow-sm"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Retry</span>
+                      </button>
+
+                      {streamingError.toLowerCase().includes('key') && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveView('settings')}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 font-semibold text-[11px] transition-colors"
+                        >
+                          Open Settings
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => useChatStore.setState({ streamingError: null })}
+                        className="p-1 rounded-md hover:bg-red-500/20 text-red-400 hover:text-red-200 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bottom Input Cockpit */}
+                <ChatInputBar
+                  characterName={currentChar.name}
+                  isStreaming={isStreaming}
+                  onSendMessage={(text) => {
+                    if (activeChatId) sendMessage(activeChatId, text);
+                  }}
+                  onGhostwrite={
+                    activeChatId ? () => generateGhostwriterSuggestion(activeChatId) : undefined
+                  }
+                />
               </div>
-            )}
 
-            {/* Bottom Input Cockpit */}
-            <ChatInputBar
-              characterName={currentChar.name}
-              isStreaming={isStreaming}
-              onSendMessage={(text) => {
-                if (activeChatId) sendMessage(activeChatId, text);
-              }}
-              onGhostwrite={
-                activeChatId ? () => generateGhostwriterSuggestion(activeChatId) : undefined
-              }
-            />
+              {/* 3rd Column Companion HUD */}
+              <RightSidebar
+                character={currentChar}
+                persona={personas.find((p) => p.id === currentChat.persona_id) || currentPersona}
+                turns={activeTurns}
+                onOpenInspector={() => setIsInspectorOpen(true)}
+              />
+            </div>
 
             {/* 6-Layer Prompt Inspector Modal */}
             {isInspectorOpen && (
