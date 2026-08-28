@@ -194,6 +194,7 @@ export const api = {
     repetitionPenalty,
     maxTokens,
     stopSequences,
+    auxiliaryPrompt,
     apiKey,
     provider = 'openrouter',
     endpointUrl,
@@ -211,6 +212,7 @@ export const api = {
     repetitionPenalty?: number;
     maxTokens?: number;
     stopSequences?: string[];
+    auxiliaryPrompt?: string;
     apiKey?: string;
     provider?: 'openrouter' | 'ollama' | 'custom';
     endpointUrl?: string;
@@ -244,6 +246,7 @@ export const api = {
           repetition_penalty: repetitionPenalty,
           max_tokens: maxTokens,
           stop: stopSequences,
+          auxiliary_prompt: auxiliaryPrompt,
           provider,
           endpoint_url: endpointUrl,
         }),
