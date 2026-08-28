@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Code2,
   Layers,
+  Pin,
+  Anchor,
 } from 'lucide-react';
 import type { Character, Persona, MessageTurn } from '../../types';
 
@@ -33,42 +35,77 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
   const [activeTab, setActiveTab] = useState<'layers' | 'raw'>('layers');
   const [copied, setCopied] = useState(false);
 
-  // Accordion toggle states
+  // Accordion toggle states for all 6 layers
   const [openLayers, setOpenLayers] = useState<Record<string, boolean>>({
     l1: true,
     l2: true,
     l3: true,
-    l4: false,
+    l4: true,
     l5: true,
+    l6: true,
   });
 
   const toggleLayer = (layerKey: string) => {
     setOpenLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }));
   };
 
-  // Compile Layer Text
-  const layer1Directives = `[SYSTEM DIRECTIVE: IMPARTIAL ROLEPLAY ENGINE]
-You are a creative, unfiltered roleplay companion. Stay in character as {{char}} at all times.
-- Format all physical actions, gestures, expressions, and environmental details inside *asterisks* (e.g. *steps forward slowly*).
-- Format all spoken dialogue clearly outside asterisks.
-- Never break character, never speak as {{user}}, and never moralize or summarize.`;
+  // Layer 1: Directives & Persona Lock
+  const layer1Directives = `[SYSTEM DIRECTIVE: IMPARTIAL CREATIVE ROLEPLAY ENGINE — PERSONA LOCK ACTIVE]
+Write ${character.name}'s next reply in a fictional chat between ${character.name} and ${persona.name}.
 
-  const layer2Persona = `[ACTIVE USER PERSONA: {{user}}]
+[INVIOLABLE ROLEPLAY RULES]
+1. IDENTITY LOCK: You ARE ${character.name}. Never describe yourself as an AI, assistant, language model, digital entity, or "Astrid".
+2. FORMAT MANDATE: *actions inside asterisks*, "dialogue inside quotation marks".
+3. USER AUTONOMY: Never speak, decide, or act for ${persona.name}.
+4. IMMERSION: Respond with emotional depth, sensory detail, and narrative weight.
+5. If you have more knowledge of ${character.name}, use it to enrich the character sheet.`;
+
+  // Layer 2: User Persona
+  const layer2Persona = `[ACTIVE USER PERSONA: ${persona.name}]
 Name: ${persona.name}
 Description / Bio: ${persona.description || 'A mysterious wanderer with sharp senses.'}
-Instruction: Address the user as ${persona.name}. Adapt responses to acknowledge their backstory and physical presence.`;
+Directive: Address the user as ${persona.name}. React to their actions. Never dictate or control ${persona.name}'s thoughts or decisions.`;
 
-  const layer3Character = `[CHARACTER CARD DEFINITION: {{char}}]
+  // Layer 3: Character Card + Dynamic Synthesis
+  const charPersonality =
+    character.personality ||
+    `A compelling fictional character named ${character.name}. Emotionally perceptive, expressive, and grounded in the current scene.`;
+  const layer3Character = `[CHARACTER CARD DEFINITION: ${character.name}]
 Name: ${character.name}
-Tagline: ${character.tagline}
-Personality: ${character.personality}
-Scenario: ${character.scenario}
-Description: ${character.description}`;
+Tagline: ${character.tagline || 'None'}
+Personality: ${charPersonality}
+Scenario: ${character.scenario || 'In the current scene.'}
+Description: ${character.description || 'Unique character in the active story.'}${
+    character.mes_example ? `\nExample Dialogue:\n${character.mes_example}` : ''
+  }`;
 
-  const layer4Lore = `[WORLD INFO / LOREBOOK SCANNER]
-Active Keywords Scanned: ["Clocktower", "Temporal Sand", "Sector 9", "Cyberdeck"]
-Matched Entries:
-- "Temporal Sand": Fine crystalline dust that accelerates or decelerates localized causality. Highly sought after by chronomancers.`;
+  // Layer 4: 📌 Pinned Permanent Memories
+  const pinnedTurns = turns.filter((t) => t.is_pinned);
+  const layer4Pinned =
+    pinnedTurns.length > 0
+      ? `[PINNED PERMANENT MEMORIES & CRITICAL PAST EVENTS — NEVER FORGET THESE]\n` +
+        pinnedTurns
+          .map((t) => {
+            const roleLabel = t.role === 'assistant' ? character.name : persona.name;
+            const text = t.swipes[t.active_index] || '';
+            return `- ${roleLabel}: ${text}`;
+          })
+          .join('\n')
+      : '[No messages currently pinned. Pin turns in chat to preserve them in permanent memory.]';
+
+  // Layer 5: Conversation History (unpinned turns)
+  const unpinnedTurns = turns.filter((t) => !t.is_pinned);
+  const turnsText = unpinnedTurns
+    .map(
+      (t) =>
+        `${
+          t.role === 'assistant' ? character.name.toUpperCase() : persona.name.toUpperCase()
+        }: ${t.swipes[t.active_index] || ''}`
+    )
+    .join('\n\n');
+
+  // Layer 6: ⚓ In-Context Depth Injection Anchor
+  const layer6DepthAnchor = `[System Reminder: You are ${character.name}. Stay fully in character. Embody ${character.name}'s voice, tone, and physical presence. Respond naturally and in-character to ${persona.name}.]`;
 
   // Estimate Tokens (~4 chars per token)
   const countTokens = (text: string) => Math.max(1, Math.ceil(text.length / 4));
@@ -76,30 +113,44 @@ Matched Entries:
   const l1Tokens = countTokens(layer1Directives);
   const l2Tokens = countTokens(layer2Persona);
   const l3Tokens = countTokens(layer3Character);
-  const l4Tokens = countTokens(layer4Lore);
-
-  const turnsText = turns
-    .map((t) => `${t.role.toUpperCase()}: ${t.swipes[t.active_index] || ''}`)
-    .join('\n\n');
+  const l4Tokens = pinnedTurns.length > 0 ? countTokens(layer4Pinned) : 0;
   const l5Tokens = countTokens(turnsText);
+  const l6Tokens = countTokens(layer6DepthAnchor);
 
-  const totalTokens = l1Tokens + l2Tokens + l3Tokens + l4Tokens + l5Tokens;
+  const totalTokens = l1Tokens + l2Tokens + l3Tokens + l4Tokens + l5Tokens + l6Tokens;
   const contextPercentage = Math.min(100, Math.round((totalTokens / maxTokens) * 100));
 
-  // Raw API JSON Payload
+  // Build Raw API JSON Payload
+  const rawMessages: Array<{ role: string; content: string }> = [
+    {
+      role: 'system',
+      content: `${layer1Directives}\n\n${layer2Persona}\n\n${layer3Character}`,
+    },
+    ...(pinnedTurns.length > 0
+      ? [{ role: 'system', content: layer4Pinned }]
+      : []),
+    ...unpinnedTurns.map((t) => ({
+      role: t.role,
+      content: t.swipes[t.active_index] || '',
+    })),
+  ];
+
+  if (rawMessages.length >= 2) {
+    rawMessages.splice(rawMessages.length - 1, 0, {
+      role: 'system',
+      content: layer6DepthAnchor,
+    });
+  } else {
+    rawMessages.push({
+      role: 'system',
+      content: layer6DepthAnchor,
+    });
+  }
+
   const rawApiPayload = {
     model: modelName,
     temperature,
-    messages: [
-      {
-        role: 'system',
-        content: `${layer1Directives}\n\n${layer2Persona}\n\n${layer3Character}\n\n${layer4Lore}`,
-      },
-      ...turns.map((t) => ({
-        role: t.role,
-        content: t.swipes[t.active_index] || '',
-      })),
-    ],
+    messages: rawMessages,
   };
 
   const fullRawJsonString = JSON.stringify(rawApiPayload, null, 2);
@@ -108,7 +159,7 @@ Matched Entries:
     navigator.clipboard.writeText(
       activeTab === 'raw'
         ? fullRawJsonString
-        : `${layer1Directives}\n\n${layer2Persona}\n\n${layer3Character}\n\n${layer4Lore}\n\n${turnsText}`
+        : `${layer1Directives}\n\n${layer2Persona}\n\n${layer3Character}\n\n${layer4Pinned}\n\n${turnsText}\n\n${layer6DepthAnchor}`
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -127,7 +178,7 @@ Matched Entries:
               <div className="flex items-center gap-2">
                 <h2 className="font-bold text-base text-white">Prompt Architecture Inspector</h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  6-Layer Compiler
+                  6-Layer Compiler Active
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
@@ -217,9 +268,15 @@ Matched Entries:
                   className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    {openLayers.l1 ? <ChevronDown className="w-4 h-4 text-blue-400" /> : <ChevronRight className="w-4 h-4 text-blue-400" />}
+                    {openLayers.l1 ? (
+                      <ChevronDown className="w-4 h-4 text-blue-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-blue-400" />
+                    )}
                     <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                    <span className="text-xs font-bold text-white">Layer 1: Global System Directives</span>
+                    <span className="text-xs font-bold text-white">
+                      Layer 1: Global Directives & Persona Lock
+                    </span>
                   </div>
                   <span className="text-[11px] font-mono text-zinc-500">~{l1Tokens} tok</span>
                 </button>
@@ -238,7 +295,11 @@ Matched Entries:
                   className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    {openLayers.l2 ? <ChevronDown className="w-4 h-4 text-emerald-400" /> : <ChevronRight className="w-4 h-4 text-emerald-400" />}
+                    {openLayers.l2 ? (
+                      <ChevronDown className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-emerald-400" />
+                    )}
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                     <span className="text-xs font-bold text-white">
                       Layer 2: User Persona (<code className="text-emerald-400 font-mono">{"{{user}}"}</code>: {persona.name})
@@ -261,22 +322,26 @@ Matched Entries:
                   className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    {openLayers.l3 ? <ChevronDown className="w-4 h-4 text-indigo-400" /> : <ChevronRight className="w-4 h-4 text-indigo-400" />}
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                    {openLayers.l3 ? (
+                      <ChevronDown className="w-4 h-4 text-purple-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-purple-400" />
+                    )}
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
                     <span className="text-xs font-bold text-white">
-                      Layer 3: Character Card (<code className="text-indigo-400 font-mono">{"{{char}}"}</code>: {character.name})
+                      Layer 3: Character Card (<code className="text-purple-400 font-mono">{"{{char}}"}</code>: {character.name})
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-zinc-500">~{l3Tokens} tok</span>
                 </button>
                 {openLayers.l3 && (
-                  <div className="p-3.5 pt-0 text-xs font-mono text-indigo-300/90 whitespace-pre-wrap leading-relaxed border-t border-[#1e1e22]">
+                  <div className="p-3.5 pt-0 text-xs font-mono text-purple-300/90 whitespace-pre-wrap leading-relaxed border-t border-[#1e1e22]">
                     {layer3Character}
                   </div>
                 )}
               </div>
 
-              {/* Layer 4: World Info / Lorebook */}
+              {/* Layer 4: 📌 Pinned Permanent Memories */}
               <div className="rounded-xl bg-[#121214] border border-[#27272a] overflow-hidden">
                 <button
                   type="button"
@@ -284,15 +349,21 @@ Matched Entries:
                   className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    {openLayers.l4 ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-400" />}
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                    <span className="text-xs font-bold text-white">Layer 4: World Info & Lorebook Injections</span>
+                    {openLayers.l4 ? (
+                      <ChevronDown className="w-4 h-4 text-amber-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-amber-400" />
+                    )}
+                    <Pin className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-bold text-white">
+                      Layer 4: 📌 Permanent Pinned Memories ({pinnedTurns.length} Pinned)
+                    </span>
                   </div>
                   <span className="text-[11px] font-mono text-zinc-500">~{l4Tokens} tok</span>
                 </button>
                 {openLayers.l4 && (
                   <div className="p-3.5 pt-0 text-xs font-mono text-amber-300/90 whitespace-pre-wrap leading-relaxed border-t border-[#1e1e22]">
-                    {layer4Lore}
+                    {layer4Pinned}
                   </div>
                 )}
               </div>
@@ -305,26 +376,68 @@ Matched Entries:
                   className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    {openLayers.l5 ? <ChevronDown className="w-4 h-4 text-orange-400" /> : <ChevronRight className="w-4 h-4 text-orange-400" />}
-                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    {openLayers.l5 ? (
+                      <ChevronDown className="w-4 h-4 text-indigo-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-indigo-400" />
+                    )}
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                     <span className="text-xs font-bold text-white">
-                      Layer 5: Conversation History ({turns.length} Turns)
+                      Layer 5: Sliding Window History ({unpinnedTurns.length} Turns)
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-zinc-500">~{l5Tokens} tok</span>
                 </button>
                 {openLayers.l5 && (
                   <div className="p-3.5 pt-0 text-xs font-mono text-zinc-300 whitespace-pre-wrap leading-relaxed border-t border-[#1e1e22] space-y-2">
-                    {turns.map((turn, idx) => (
-                      <div key={turn.id} className="p-2 rounded-lg bg-[#18181b] border border-[#232326]">
-                        <span className={`text-[10px] font-bold uppercase ${turn.role === 'assistant' ? 'text-indigo-400' : 'text-emerald-400'}`}>
-                          [{turn.role}] Turn #{idx + 1}
-                        </span>
-                        <p className="mt-1 text-xs text-zinc-300">
-                          {turn.swipes[turn.active_index] || ''}
-                        </p>
-                      </div>
-                    ))}
+                    {unpinnedTurns.length === 0 ? (
+                      <div className="text-zinc-500 italic p-2">[No dialogue turns yet]</div>
+                    ) : (
+                      unpinnedTurns.map((turn, idx) => (
+                        <div
+                          key={turn.id}
+                          className="p-2 rounded-lg bg-[#18181b] border border-[#232326]"
+                        >
+                          <span
+                            className={`text-[10px] font-bold uppercase ${
+                              turn.role === 'assistant' ? 'text-indigo-400' : 'text-emerald-400'
+                            }`}
+                          >
+                            [{turn.role}] Turn #{idx + 1}
+                          </span>
+                          <p className="mt-1 text-xs text-zinc-300">
+                            {turn.swipes[turn.active_index] || ''}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Layer 6: ⚓ Depth Injection Anchor */}
+              <div className="rounded-xl bg-[#121214] border border-[#27272a] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleLayer('l6')}
+                  className="flex items-center justify-between w-full p-3.5 text-left hover:bg-[#18181b] transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {openLayers.l6 ? (
+                      <ChevronDown className="w-4 h-4 text-teal-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-teal-400" />
+                    )}
+                    <Anchor className="w-3.5 h-3.5 text-teal-400" />
+                    <span className="text-xs font-bold text-white">
+                      Layer 6: ⚓ In-Context Depth Injection (Depth: 2)
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-zinc-500">~{l6Tokens} tok</span>
+                </button>
+                {openLayers.l6 && (
+                  <div className="p-3.5 pt-0 text-xs font-mono text-teal-300/90 whitespace-pre-wrap leading-relaxed border-t border-[#1e1e22]">
+                    {layer6DepthAnchor}
                   </div>
                 )}
               </div>
