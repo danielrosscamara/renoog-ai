@@ -30,6 +30,7 @@ class StreamChatRequest(BaseModel):
     repetition_penalty: float | None = Field(None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(None, ge=1, le=8192)
     stop: list[str] | None = Field(None, description="Stop sequences to halt generation")
+    auxiliary_prompt: str | None = Field(None, description="Optional custom Auxiliary / NSFW / Narrative Focus directive")
 
 async def stream_chat_completion_generator(
     chat_id: str,
@@ -263,7 +264,7 @@ async def stream_chat_response(
     ]
     combined_stop = list(set((req.stop or []) + auto_stop))
 
-    # 3. Compile 6-Layer Messages Payload with Model Context Window
+    # 3. Compile 6-Layer Messages Payload with Model Context Window & Position 8 Auxiliary Prompt
     raw_turns = getattr(chat, "turns", None) or []
     existing_turns: list[MessageTurnModel] = [*raw_turns, user_turn]
     compiled_messages = compile_prompt_payload(
@@ -271,6 +272,7 @@ async def stream_chat_response(
         persona=persona,
         turns=existing_turns,
         max_context=max_ctx,
+        auxiliary_prompt=req.auxiliary_prompt,
     )
 
     target_temp = req.temperature if req.temperature is not None else float(getattr(chat, "temperature", 0.90))
