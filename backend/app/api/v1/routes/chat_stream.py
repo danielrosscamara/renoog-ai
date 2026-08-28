@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from pydantic import BaseModel, Field
@@ -49,6 +50,10 @@ async def stream_chat_completion_generator(
 ) -> AsyncGenerator[str, None]:
     """Connects to OpenRouter or Local Ollama/Custom API and streams tokens as Server-Sent Events."""
     full_response_text = ""
+    full_thought_text = ""
+    is_thinking_block = False
+    start_time = time.time()
+    first_token_time: float | None = None
 
     # 1. Resolve Target URL and Headers based on Provider
     if provider == "ollama":
@@ -133,11 +138,54 @@ async def stream_chat_completion_generator(
                             break
                         try:
                             chunk = json.loads(raw_data)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                            if delta:
-                                token_count += 1
-                                full_response_text += delta
-                                yield json.dumps({"event": "token", "token": delta})
+                            delta_obj = chunk.get("choices", [{}])[0].get("delta", {}) or {}
+
+                            # 1. Capture reasoning/thought fields (DeepSeek-R1 / OpenRouter format)
+                            reasoning_delta = (
+                                delta_obj.get("reasoning_content")
+                                or delta_obj.get("reasoning")
+                                or delta_obj.get("thought")
+                                or ""
+                            )
+                            if reasoning_delta:
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+                                full_thought_text += reasoning_delta
+                                yield json.dumps({"event": "thought", "thought": reasoning_delta})
+
+                            # 2. Capture standard content tokens
+                            content_delta = delta_obj.get("content", "")
+                            if content_delta:
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+
+                                # Handle inline <think> tags (Ollama reasoning models)
+                                if "<think>" in content_delta:
+                                    is_thinking_block = True
+                                    parts = content_delta.split("<think>", 1)
+                                    if parts[0]:
+                                        token_count += 1
+                                        full_response_text += parts[0]
+                                        yield json.dumps({"event": "token", "token": parts[0]})
+                                    content_delta = parts[1]
+
+                                if is_thinking_block:
+                                    if "</think>" in content_delta:
+                                        is_thinking_block = False
+                                        think_parts = content_delta.split("</think>", 1)
+                                        full_thought_text += think_parts[0]
+                                        yield json.dumps({"event": "thought", "thought": think_parts[0]})
+                                        if think_parts[1]:
+                                            token_count += 1
+                                            full_response_text += think_parts[1]
+                                            yield json.dumps({"event": "token", "token": think_parts[1]})
+                                    else:
+                                        full_thought_text += content_delta
+                                        yield json.dumps({"event": "thought", "thought": content_delta})
+                                else:
+                                    token_count += 1
+                                    full_response_text += content_delta
+                                    yield json.dumps({"event": "token", "token": content_delta})
 
                             # Capture server-calculated usage statistics if provided
                             usage = chunk.get("usage")
@@ -163,11 +211,18 @@ async def stream_chat_completion_generator(
             await session.commit()
             await session.refresh(assistant_turn)
 
-            logger.info(f"[STREAM] 💾 Saved assistant turn '{assistant_turn.id}' to database.")
+            total_duration = max(0.001, time.time() - start_time)
+            latency_ms = round((first_token_time - start_time) * 1000) if first_token_time else round(total_duration * 1000)
+            tok_per_sec = round(token_count / total_duration, 1)
+
+            logger.info(f"[STREAM] 💾 Saved assistant turn '{assistant_turn.id}'. Latency: {latency_ms}ms | Speed: {tok_per_sec} tok/s | Thought length: {len(full_thought_text)} chars.")
             yield json.dumps({
                 "event": "done",
                 "turn_id": str(assistant_turn.id),
                 "full_text": full_response_text.strip(),
+                "thought": full_thought_text.strip(),
+                "speed_tok_s": tok_per_sec,
+                "latency_ms": latency_ms,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens or (prompt_tokens + completion_tokens),
