@@ -199,6 +199,7 @@ export const api = {
     provider = 'openrouter',
     endpointUrl,
     onToken,
+    onThought,
     onDone,
     onError,
   }: {
@@ -217,10 +218,18 @@ export const api = {
     provider?: 'openrouter' | 'ollama' | 'custom';
     endpointUrl?: string;
     onToken: (token: string) => void;
+    onThought?: (thoughtToken: string) => void;
     onDone: (
       turnId: string,
       fullText: string,
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+      usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+        thought?: string;
+        speed_tok_s?: number;
+        latency_ms?: number;
+      }
     ) => void;
     onError: (err: string) => void;
   }): Promise<void> {
@@ -280,11 +289,16 @@ export const api = {
             const parsed = JSON.parse(jsonStr);
             if (parsed.event === 'token' && parsed.token) {
               onToken(parsed.token);
+            } else if (parsed.event === 'thought' && parsed.thought) {
+              if (onThought) onThought(parsed.thought);
             } else if (parsed.event === 'done') {
               onDone(parsed.turn_id, parsed.full_text, {
                 prompt_tokens: parsed.prompt_tokens || 0,
                 completion_tokens: parsed.completion_tokens || 0,
                 total_tokens: parsed.total_tokens || 0,
+                thought: parsed.thought || '',
+                speed_tok_s: parsed.speed_tok_s,
+                latency_ms: parsed.latency_ms,
               });
             } else if (parsed.event === 'error') {
               onError(parsed.error);
