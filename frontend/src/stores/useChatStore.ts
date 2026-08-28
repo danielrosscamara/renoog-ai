@@ -327,6 +327,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const activePersona = get().personas.find((p) => p.id === get().activePersonaId);
     const samplers = getStoredGenerationSamplers(activePersona?.name);
+    const enableAux = localStorage.getItem('renoog_enable_auxiliary') !== 'false';
+    const customAux = localStorage.getItem('renoog_auxiliary_prompt');
+    const effectiveAuxPrompt = enableAux ? (customAux || undefined) : '';
 
     await api.streamChatMessage({
       chatId,
@@ -341,6 +344,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       repetitionPenalty: samplers.repetitionPenalty,
       maxTokens: samplers.maxTokens,
       stopSequences: samplers.stopSequences,
+      auxiliaryPrompt: effectiveAuxPrompt,
       apiKey: storedApiKey || undefined,
       onToken: (token: string) => {
         set((state) => {
@@ -428,6 +432,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const activePersona = get().personas.find((p) => p.id === get().activePersonaId);
     const samplers = getStoredGenerationSamplers(activePersona?.name);
+    const enableAux = localStorage.getItem('renoog_enable_auxiliary') !== 'false';
+    const customAux = localStorage.getItem('renoog_auxiliary_prompt');
+    const effectiveAuxPrompt = enableAux ? (customAux || undefined) : '';
 
     await api.streamChatMessage({
       chatId,
@@ -442,6 +449,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       repetitionPenalty: samplers.repetitionPenalty,
       maxTokens: samplers.maxTokens,
       stopSequences: samplers.stopSequences,
+      auxiliaryPrompt: effectiveAuxPrompt,
       apiKey: storedApiKey || undefined,
       onToken: (token: string) => {
         set((state) => {
