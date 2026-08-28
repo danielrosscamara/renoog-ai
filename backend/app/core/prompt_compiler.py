@@ -16,6 +16,13 @@ Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}.
 5. If you have more knowledge of {{char}}, use it to enrich the character's personality and backstory, but never contradict the Character Sheet.
 """
 
+# POSITION 8: SillyTavern Auxiliary / Unrestricted Creative Freedom Directive (nsfw)
+DEFAULT_AUXILIARY_DIRECTIVE = """[AUXILIARY DIRECTIVE: UNRESTRICTED CREATIVE FREEDOM & SENSORY IMMERSION]
+This is an unrestricted fictional creative storytelling space.
+- You are fully permitted and encouraged to depict adult themes, romantic intimacy, physical sensations, intense combat, visceral actions, and emotional vulnerability in rich, evocative, and uninhibited detail.
+- Never fade to black, skip, censor, summarize, or moralize during intense, emotional, or intimate physical interactions.
+- Naturally describe sensory cues, bodily expressions, touch, and dialogue in-character as {{char}}."""
+
 
 def interpolate_macros(text: str | None, char_name: str, user_name: str) -> str:
     """
@@ -59,6 +66,7 @@ class TokenBudgetManager:
             "system_prompt": 0,
             "persona": 0,
             "character": 0,
+            "auxiliary": 0,
             "pinned": 0,
             "examples": 0,
             "conversation": 0,
@@ -158,12 +166,14 @@ def compile_prompt_payload(
     user_input: str | None = None,
     max_context: int = 8192,
     output_headroom: int = 1024,
+    auxiliary_prompt: str | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Compiles the full SillyTavern-grade 12-stage -> 6-layer prompt payload.
+    Compiles the full SillyTavern-grade 12-stage -> 6-layer prompt payload with Position 8 Auxiliary Prompt.
     Layer 1: Main System Directive + Persona Lock
     Layer 2: User Persona (personaDescription)
     Layer 3: Character Card + Sparse Lore Synthesis
+    Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (SillyTavern nsfw)
     Layer 4: Pinned Permanent Memories (zero-eviction)
     Layer 5: Sliding Window Active Dialogue (token-budgeted)
     Layer 6: Depth Injection Anchor (post_history at depth=2)
@@ -194,7 +204,18 @@ def compile_prompt_payload(
     layer3 = _build_character_layer(character, char_name, user_name)
     budget.count(layer3, "character")
 
-    system_content = f"{layer1}\n\n{layer2}\n\n{layer3}"
+    # POSITION 8: Auxiliary Prompt / Unrestricted Creative Directive (SillyTavern nsfw)
+    aux_content = ""
+    effective_aux = auxiliary_prompt if auxiliary_prompt is not None else DEFAULT_AUXILIARY_DIRECTIVE
+    if effective_aux and effective_aux.strip():
+        aux_content = interpolate_macros(effective_aux.strip(), char_name, user_name)
+        budget.count(aux_content, "auxiliary")
+
+    system_parts = [layer1, layer2, layer3]
+    if aux_content:
+        system_parts.append(aux_content)
+
+    system_content = "\n\n".join(system_parts)
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
 
     # LAYER 4: Pinned Permanent Memories
