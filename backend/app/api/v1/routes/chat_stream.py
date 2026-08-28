@@ -227,25 +227,63 @@ async def stream_chat_response(
     db.add(user_turn)
     await db.commit()
 
-    # 3. Compile 6-Layer Messages Payload
+    # Model context window resolution map (SillyTavern power-user context presets)
+    MODEL_CONTEXT_MAP = {
+        "dolphin-phi": 4096,
+        "phi": 4096,
+        "gemma": 8192,
+        "llama3": 8192,
+        "qwen": 32768,
+        "mistral": 32768,
+        "hermes": 32768,
+        "claude": 200000,
+    }
+
+    target_model = str(req.model_name or getattr(chat, "model_name", None) or (
+        "qwen2.5-coder:1.5b" if provider == "ollama" else settings.DEFAULT_MODEL
+    ))
+
+    # Resolve context limit for active model
+    max_ctx = 8192
+    for model_key, ctx_val in MODEL_CONTEXT_MAP.items():
+        if model_key in target_model.lower():
+            max_ctx = ctx_val
+            break
+
+    # Build dynamic stop sequences (SillyTavern instruct-mode.js:stop_sequence port)
+    char_name = str(getattr(character, "name", "Character"))
+    user_name = str(getattr(persona, "name", "User")) if persona else "User"
+    auto_stop = [
+        f"\n{user_name}:",
+        f"\n{char_name}:",
+        "\nUser:",
+        "\n{{user}}:",
+        f"\n<{user_name}>",
+        f"\n<{char_name}>",
+    ]
+    combined_stop = list(set((req.stop or []) + auto_stop))
+
+    # 3. Compile 6-Layer Messages Payload with Model Context Window
     raw_turns = getattr(chat, "turns", None) or []
     existing_turns: list[MessageTurnModel] = [*raw_turns, user_turn]
-    compiled_messages = compile_prompt_payload(character, persona, existing_turns)
-
-    target_model = req.model_name or getattr(chat, "model_name", None) or (
-        "qwen2.5-coder:1.5b" if provider == "ollama" else settings.DEFAULT_MODEL
+    compiled_messages = compile_prompt_payload(
+        character=character,
+        persona=persona,
+        turns=existing_turns,
+        max_context=max_ctx,
     )
+
     target_temp = req.temperature if req.temperature is not None else float(getattr(chat, "temperature", 0.90))
 
     logger.info(
-        f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | Provider='{provider}' | Target Model='{target_model}' | Temp={target_temp} | RepPenalty={req.repetition_penalty} | MaxTokens={req.max_tokens}"
+        f"[STREAM] 🧩 Prompt compiled with {len(compiled_messages)} messages | MaxContext={max_ctx} | Provider='{provider}' | Target Model='{target_model}' | Temp={target_temp} | RepPenalty={req.repetition_penalty} | MaxTokens={req.max_tokens}"
     )
 
     return EventSourceResponse(
         stream_chat_completion_generator(
             chat_id=req.chat_id,
             payload_messages=compiled_messages,
-            model_name=str(target_model),
+            model_name=target_model,
             temperature=target_temp,
             provider=provider,
             api_key=api_key,
@@ -255,7 +293,7 @@ async def stream_chat_response(
             presence_penalty=req.presence_penalty,
             repetition_penalty=req.repetition_penalty,
             max_tokens=req.max_tokens,
-            stop=req.stop,
+            stop=combined_stop,
         )
     )
 
