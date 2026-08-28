@@ -79,6 +79,8 @@ export interface AppSettings {
   repetition_penalty: number;
   max_tokens: number;
   anti_impersonation: boolean;
+  enable_auxiliary_prompt?: boolean;
+  auxiliary_prompt?: string;
   theme: 'dark' | 'light';
 }
 
