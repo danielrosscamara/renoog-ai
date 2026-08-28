@@ -262,9 +262,7 @@ def compile_prompt_payload(
 
     # LAYER 6: Depth Injection Anchor (depth=2 from bottom)
     depth_anchor = interpolate_macros(
-        "[System Reminder: You are {{char}}. Stay fully in character. "
-        "Embody {{char}}'s voice, tone, and physical presence. "
-        "Respond naturally and in-character to {{user}}.]",
+        "[System Reminder: You are {{char}}. First enclose your internal thoughts and emotional strategy inside <think>...</think>, then deliver {{char}}'s spoken dialogue and actions.]",
         char_name,
         user_name,
     )
