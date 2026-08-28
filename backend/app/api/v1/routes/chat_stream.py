@@ -128,6 +128,8 @@ async def stream_chat_completion_generator(
                 prompt_tokens = 0
                 completion_tokens = 0
                 total_tokens = 0
+                stream_buffer = ""
+                in_think = False
 
                 async for line in response.aiter_lines():
                     if not line:
@@ -153,39 +155,47 @@ async def stream_chat_completion_generator(
                                 full_thought_text += reasoning_delta
                                 yield json.dumps({"event": "thought", "thought": reasoning_delta})
 
-                            # 2. Capture standard content tokens
+                            # 2. Capture standard content tokens with sliding buffer
                             content_delta = delta_obj.get("content", "")
                             if content_delta:
                                 if first_token_time is None:
                                     first_token_time = time.time()
 
-                                # Handle inline <think> tags (Ollama reasoning models)
-                                if "<think>" in content_delta:
-                                    is_thinking_block = True
-                                    parts = content_delta.split("<think>", 1)
-                                    if parts[0]:
-                                        token_count += 1
-                                        full_response_text += parts[0]
-                                        yield json.dumps({"event": "token", "token": parts[0]})
-                                    content_delta = parts[1]
+                                stream_buffer += content_delta
 
-                                if is_thinking_block:
-                                    if "</think>" in content_delta:
-                                        is_thinking_block = False
-                                        think_parts = content_delta.split("</think>", 1)
-                                        full_thought_text += think_parts[0]
-                                        yield json.dumps({"event": "thought", "thought": think_parts[0]})
-                                        if think_parts[1]:
+                                while stream_buffer:
+                                    if not in_think:
+                                        if "<think>" in stream_buffer:
+                                            before, after = stream_buffer.split("<think>", 1)
+                                            if before:
+                                                token_count += 1
+                                                full_response_text += before
+                                                yield json.dumps({"event": "token", "token": before})
+                                            in_think = True
+                                            stream_buffer = after
+                                        elif any("<think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 7), len(stream_buffer))):
+                                            # Potential partial <think> tag at end of buffer; hold for next chunk
+                                            break
+                                        else:
                                             token_count += 1
-                                            full_response_text += think_parts[1]
-                                            yield json.dumps({"event": "token", "token": think_parts[1]})
+                                            full_response_text += stream_buffer
+                                            yield json.dumps({"event": "token", "token": stream_buffer})
+                                            stream_buffer = ""
                                     else:
-                                        full_thought_text += content_delta
-                                        yield json.dumps({"event": "thought", "thought": content_delta})
-                                else:
-                                    token_count += 1
-                                    full_response_text += content_delta
-                                    yield json.dumps({"event": "token", "token": content_delta})
+                                        if "</think>" in stream_buffer:
+                                            thought_part, after = stream_buffer.split("</think>", 1)
+                                            if thought_part:
+                                                full_thought_text += thought_part
+                                                yield json.dumps({"event": "thought", "thought": thought_part})
+                                            in_think = False
+                                            stream_buffer = after
+                                        elif any("</think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 8), len(stream_buffer))):
+                                            # Potential partial </think> tag at end of buffer; hold for next chunk
+                                            break
+                                        else:
+                                            full_thought_text += stream_buffer
+                                            yield json.dumps({"event": "thought", "thought": stream_buffer})
+                                            stream_buffer = ""
 
                             # Capture server-calculated usage statistics if provided
                             usage = chunk.get("usage")
@@ -195,6 +205,16 @@ async def stream_chat_completion_generator(
                                 total_tokens = usage.get("total_tokens", 0)
                         except Exception:
                             continue
+
+                # Flush any remaining buffer text
+                if stream_buffer:
+                    if in_think:
+                        full_thought_text += stream_buffer
+                        yield json.dumps({"event": "thought", "thought": stream_buffer})
+                    else:
+                        token_count += 1
+                        full_response_text += stream_buffer
+                        yield json.dumps({"event": "token", "token": stream_buffer})
 
                 logger.info(f"[STREAM] ✅ Finished stream. Generated {token_count} tokens (~{len(full_response_text)} chars). Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
 
