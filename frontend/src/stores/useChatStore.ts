@@ -20,6 +20,9 @@ export interface ChatState {
   pendingView: ViewType | null;
   pendingChatId: string | null;
   editingCharacter: Character | null;
+  isRightSidebarOpen: boolean;
+  activeRightTab: 'thoughts' | 'memory' | 'sheet' | 'world';
+  latestThoughtTrace: Record<string, { thought: string; isThinking: boolean; speedTokS?: number; latencyMs?: number }>;
 
   // Actions
   initializeData: () => Promise<void>;
@@ -31,6 +34,8 @@ export interface ChatState {
   setPendingView: (view: ViewType | null) => void;
   proceedNavigation: () => void;
   toggleSidebar: () => void;
+  toggleRightSidebar: () => void;
+  setActiveRightTab: (tab: 'thoughts' | 'memory' | 'sheet' | 'world') => void;
   setSwipeIndex: (chatId: string, turnId: string, index: number) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
   rerollMessage: (chatId: string, turnId: string) => Promise<void>;
@@ -132,6 +137,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingView: null,
   pendingChatId: null,
   editingCharacter: null,
+  isRightSidebarOpen: localStorage.getItem('renoog_right_sidebar') !== 'false',
+  activeRightTab: (localStorage.getItem('renoog_active_right_tab') as 'thoughts' | 'memory' | 'sheet' | 'world') || 'thoughts',
+  latestThoughtTrace: {},
+  toggleRightSidebar: () =>
+    set((state) => {
+      const next = !state.isRightSidebarOpen;
+      localStorage.setItem('renoog_right_sidebar', String(next));
+      return { isRightSidebarOpen: next };
+    }),
+  setActiveRightTab: (tab) => {
+    localStorage.setItem('renoog_active_right_tab', tab);
+    set({ activeRightTab: tab });
+  },
 
   initializeData: async () => {
     try {
@@ -346,6 +364,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       stopSequences: samplers.stopSequences,
       auxiliaryPrompt: effectiveAuxPrompt,
       apiKey: storedApiKey || undefined,
+      onThought: (thoughtToken: string) => {
+        set((state) => {
+          const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
+          return {
+            latestThoughtTrace: {
+              ...state.latestThoughtTrace,
+              [chatId]: {
+                ...prev,
+                thought: prev.thought + thoughtToken,
+                isThinking: true,
+              },
+            },
+          };
+        });
+      },
       onToken: (token: string) => {
         set((state) => {
           const turns = state.messageTurns[chatId] || [];
@@ -381,6 +414,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
           return {
             isStreaming: false,
+            latestThoughtTrace: {
+              ...state.latestThoughtTrace,
+              [chatId]: {
+                thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
+                isThinking: false,
+                speedTokS: usage?.speed_tok_s,
+                latencyMs: usage?.latency_ms,
+              },
+            },
             exactTokenUsage:
               usage && usage.prompt_tokens > 0
                 ? { ...state.exactTokenUsage, [chatId]: usage }
@@ -451,6 +493,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       stopSequences: samplers.stopSequences,
       auxiliaryPrompt: effectiveAuxPrompt,
       apiKey: storedApiKey || undefined,
+      onThought: (thoughtToken: string) => {
+        set((state) => {
+          const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
+          return {
+            latestThoughtTrace: {
+              ...state.latestThoughtTrace,
+              [chatId]: {
+                ...prev,
+                thought: prev.thought + thoughtToken,
+                isThinking: true,
+              },
+            },
+          };
+        });
+      },
       onToken: (token: string) => {
         set((state) => {
           const currentTurns = state.messageTurns[chatId] || [];
@@ -488,6 +545,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
           return {
             isStreaming: false,
+            latestThoughtTrace: {
+              ...state.latestThoughtTrace,
+              [chatId]: {
+                thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
+                isThinking: false,
+                speedTokS: usage?.speed_tok_s,
+                latencyMs: usage?.latency_ms,
+              },
+            },
             exactTokenUsage:
               usage && usage.prompt_tokens > 0
                 ? { ...state.exactTokenUsage, [chatId]: usage }
