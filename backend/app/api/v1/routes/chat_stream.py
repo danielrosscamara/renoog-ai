@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Header, status
@@ -225,7 +226,15 @@ async def stream_chat_completion_generator(
 
         # Save generated assistant response into database
         async with AsyncSessionLocal() as session:
-            final_text = full_response_text.strip() or "*(smiles gently and waits for your response)*"
+            final_text = full_response_text.strip()
+            # Clean any trailing hallucinated user turns or macro tags
+            final_text = re.sub(r"\n+\{\{(?:random_)?user[\s\S]*$", "", final_text, flags=re.IGNORECASE).strip()
+            final_text = re.sub(r"\n+User:[\s\S]*$", "", final_text, flags=re.IGNORECASE).strip()
+            # Clean any leading assistant meta-preambles (e.g. "Of course! Here's an introduction:")
+            final_text = re.sub(r"^(?:(?:Of course|Sure|Certainly)!?\s*)?(?:Here(?:'s| is) (?:a short |an )?(?:introduction|response|reply|look)[\s\S]*?:\s*\n*)", "", final_text, flags=re.IGNORECASE).strip()
+            if not final_text:
+                final_text = "*(smiles gently and waits for your response)*"
+
             assistant_turn = MessageTurnModel(
                 chat_id=chat_id,
                 role="assistant",
@@ -340,8 +349,13 @@ async def stream_chat_response(
         f"\n{char_name}:",
         "\nUser:",
         "\n{{user}}:",
+        "\n{{user",
+        "\n{{random_user",
+        "\n{{char}}:",
+        "\n{{char",
         f"\n<{user_name}>",
         f"\n<{char_name}>",
+        "\n<START>",
     ]
     combined_stop = list(set((req.stop or []) + auto_stop))
 

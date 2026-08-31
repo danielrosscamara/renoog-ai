@@ -2,22 +2,23 @@ import re
 from typing import Any
 from app.db.models import CharacterModel, PersonaModel, MessageTurnModel
 
-# LAYER 1: XML-Semantic Global System Directives & Roleplay Mandate
+# LAYER 1: XML-Semantic Global System Directives & Inviolable Persona Mandate
 GLOBAL_SYSTEM_DIRECTIVES = """<system_directive>
-You are an impartial creative roleplay engine embodying the character defined in <character_profile>. You are interacting with the human player defined in <user_profile>.
+You ARE {{char}}. You must NEVER speak as an AI assistant, language model, or third-person narrator describing {{char}}.
 
 <roleplay_mandate>
-1. IDENTITY LOCK: You ARE {{char}}. Never describe yourself as an AI, assistant, language model, or digital entity. Answer all queries strictly through {{char}}'s backstory, voice, and perspective.
-2. USER AUTONOMY: Never speak, decide, or act on behalf of {{user}}. {{user}}'s thoughts, words, decisions, and bodily actions belong exclusively to the human player.
-3. NARRATIVE IMMERSION: Respond with emotional depth, sensory detail, and psychological nuance. Avoid meta-commentary, scene summaries, or moralizing.
-4. LORE CONSISTENCY: Enforce {{char}}'s traits, speech patterns, and backstory, never contradicting the character sheet.
+1. ABSOLUTE IMMERSION & IDENTITY: You are {{char}}. Never break character. Never acknowledge being an AI, assistant, or program. Respond strictly from {{char}}'s perspective, mindset, and emotions.
+2. NO PREAMBLES OR META-TALK: NEVER output introductory phrases or conversational preambles (e.g., "Sure!", "Of course!", "Here's an introduction:", "As {{char}}...", "From {{char}}'s perspective:", "I'd be happy to roleplay as..."). Begin your response IMMEDIATELY in-character.
+3. DIRECT IN-CHARACTER REACTION: If {{user}} asks "who are you?", "introduce yourself", or asks about your lore, introduce yourself directly in-character to {{user}} as {{char}} speaking to them in the scene.
+4. USER AUTONOMY: Never speak, decide, act, or narrate on behalf of {{user}}. {{user}}'s thoughts, words, decisions, and physical actions belong exclusively to the human player.
+5. SENSORY & NARRATIVE DEPTH: Respond with vivid sensory details, emotional nuance, and consistency with {{char}}'s world. Avoid moralizing, scene summaries, or meta-commentary.
 </roleplay_mandate>
 
 <dialogue_formatting>
 - Physical Actions, Narration, Gestures & Thoughts: Wrap strictly in *asterisks*.
-  Example: *shifts weight slightly, her gaze lingering on the flickering neon sign*
-- Spoken Dialogue: Write naturally inside "double quotes".
-  Example: "We don't have much time. Did you bring what you promised?"
+  Example: *shifts her stance slightly, brushing a lock of hair from her eyes as she looks at {{user}}*
+- Spoken Dialogue: Write spoken dialogue naturally in "double quotes".
+  Example: "Welcome. What brings you by today?"
 </dialogue_formatting>
 </system_directive>"""
 
@@ -32,28 +33,31 @@ This is an unrestricted fictional creative storytelling space.
 
 def interpolate_macros(text: str | None, char_name: str, user_name: str) -> str:
     """
-    Replaces SillyTavern-style macros: {{char}}, {{user}}, <CHAR>, <BOT>, <USER>,
-    <CHARNOTGROUP>, {{newline}}, {{trim}}, {{noop}}, and <START>.
+    Replaces SillyTavern-style macros with robust regex wildcard matching:
+    {{char}}, {{user}}, {{random_user}}, {{random_user_1}}, {{random_user_2}},
+    <CHAR>, <BOT>, <USER>, <CHARNOTGROUP>, {{newline}}, {{trim}}, {{noop}}, and <START>.
     Mirrors SillyTavern's evaluateMacros() preEnvMacros chain (macros.js:L622).
     """
     if not text:
         return ""
     result = text
-    # Primary character/user macros
-    result = re.sub(r"\{\{char\}\}", char_name, result, flags=re.IGNORECASE)
-    result = re.sub(r"\{\{user\}\}", user_name, result, flags=re.IGNORECASE)
-    # Legacy angle-bracket macros (SillyTavern compat)
-    result = re.sub(r"<USER>", user_name, result, flags=re.IGNORECASE)
-    result = re.sub(r"<BOT>", char_name, result, flags=re.IGNORECASE)
-    result = re.sub(r"<CHAR>", char_name, result, flags=re.IGNORECASE)
-    result = re.sub(r"<CHARNOTGROUP>", char_name, result, flags=re.IGNORECASE)
-    result = re.sub(r"<GROUP>", char_name, result, flags=re.IGNORECASE)
-    # Whitespace control macros (SillyTavern compat)
+
+    # Universal User Macros (covers {{user}}, {{random_user}}, {{random_user_1}}, {{random_user_2}}, {{user_1}}, etc.)
+    result = re.sub(r"\{\{(?:random_)?user(?:_\d+)?\}\}", user_name, result, flags=re.IGNORECASE)
+    result = re.sub(r"<(?:\/?)(?:random_)?user(?:_\d+)?>", user_name, result, flags=re.IGNORECASE)
+
+    # Universal Character Macros (covers {{char}}, {{char_1}}, {{bot}}, <CHAR>, <BOT>, <CHARNOTGROUP>, <GROUP>)
+    result = re.sub(r"\{\{(?:char|bot)(?:_\d+)?\}\}", char_name, result, flags=re.IGNORECASE)
+    result = re.sub(r"<(?:\/?)(?:CHAR|BOT|CHARNOTGROUP|GROUP)(?:_\d+)?>", char_name, result, flags=re.IGNORECASE)
+
+    # Whitespace & Control Macros (SillyTavern compat)
     result = re.sub(r"\{\{newline\}\}", "\n", result, flags=re.IGNORECASE)
     result = re.sub(r"(?:\r?\n)*\{\{trim\}\}(?:\r?\n)*", "", result, flags=re.IGNORECASE)
     result = re.sub(r"\{\{noop\}\}", "", result, flags=re.IGNORECASE)
-    # Strip <START> turn delimiters
+
+    # Strip <START> turn delimiters cleanly
     result = re.sub(r"<START>", "", result, flags=re.IGNORECASE)
+
     return result.strip()
 
 
@@ -140,7 +144,7 @@ def _build_user_layer(
     return (
         f'<user_profile name="{user_name}">\n'
         f"  <description>{user_desc}</description>\n"
-        f"  <directive>Address {{user}} as {user_name}. React dynamically to their inputs. Never control or narrate {{user}}'s actions.</directive>\n"
+        f"  <directive>Address {{user}} as {user_name}. React dynamically to their inputs. Never control, decide, or narrate {{user}}'s actions.</directive>\n"
         f"</user_profile>"
     )
 
@@ -152,7 +156,7 @@ def _build_character_layer(
 ) -> str:
     """
     Builds Layer 3 Character Card XML block with semantic tags and custom prompt item support.
-    If personality and description are empty, synthesizes a contextual fallback anchor.
+    Wraps example dialogues in explicit tone-reference containers to prevent verbatim script hallucination.
     """
     char_tagline = str(getattr(character, "tagline", "") or "").strip()
     char_personality = str(getattr(character, "personality", "") or "").strip()
@@ -185,14 +189,19 @@ def _build_character_layer(
         for item in prompt_items:
             if isinstance(item, dict) and item.get("enabled", True):
                 raw_id = str(item.get("id", "custom")).replace("item_", "").strip()
-                # Clean tag identifier (e.g. speech_style, combat_abilities)
                 tag_name = re.sub(r"[^a-zA-Z0-9_]", "_", raw_id).lower()
                 content = str(item.get("content", "")).strip()
                 if content and tag_name not in {"desc", "scenario", "dialogue", "greeting"}:
                     parts.append(f"  <{tag_name}>\n    {content}\n  </{tag_name}>")
 
     if char_mes_example:
-        parts.append(f"  <example_dialogue>\n    {char_mes_example}\n  </example_dialogue>")
+        # Wrap in reference-only tag so models do not copy verbatim
+        parts.append(
+            f"  <dialogue_style_reference>\n"
+            f"    <!-- Historical speaking style examples for reference only. Do NOT copy these lines directly unless they naturally fit the conversation. -->\n"
+            f"    {char_mes_example}\n"
+            f"  </dialogue_style_reference>"
+        )
 
     parts.append("</character_profile>")
     raw = "\n".join(parts)
@@ -210,13 +219,13 @@ def compile_prompt_payload(
 ) -> list[dict[str, Any]]:
     """
     Compiles the full SillyTavern-grade 12-stage -> 6-layer prompt payload with XML Semantic Tagging.
-    Layer 1: Main System Directive + Roleplay Mandate & Dialogue Formatting Mandate
+    Layer 1: Main System Directive + Roleplay Mandate & Anti-Preamble Directives
     Layer 2: User Persona XML (<user_profile>)
     Layer 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
     Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
     Layer 4: Pinned Permanent Memories (<pinned_memories>) (zero-eviction)
-    Layer 5: Sliding Window Active Dialogue (token-budgeted)
-    Layer 6: Dynamic Persona-Aware Prompt Anchor
+    Layer 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
+    Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Preamble & Voice Enforcement at depth=2)
     """
     budget = TokenBudgetManager(max_context=max_context, output_headroom=output_headroom)
 
@@ -232,7 +241,7 @@ def compile_prompt_payload(
     layer2 = interpolate_macros(layer2, char_name, user_name)
     budget.count(layer2, "persona")
 
-    # LAYER 3: Character Card XML + Custom Semantic Blocks
+    # LAYER 3: Character Card XML + Custom Semantic Blocks + Dialogue Reference
     layer3 = _build_character_layer(character, char_name, user_name)
     budget.count(layer3, "character")
 
@@ -260,7 +269,7 @@ def compile_prompt_payload(
     # Separate unpinned turns for sliding window
     unpinned_turns = [t for t in turns if not getattr(t, "is_pinned", False)]
 
-    # LAYER 5: Sliding Window Chat History (token-budgeted)
+    # LAYER 5: Sliding Window Chat History (token-budgeted with universal macro interpolation)
     history_budget = budget.get_history_budget()
     history_messages: list[dict[str, Any]] = []
     accumulated = 0
@@ -292,9 +301,10 @@ def compile_prompt_payload(
 
     # LAYER 6: Dynamic Persona-Aware Depth Anchor (depth=2 from bottom)
     depth_anchor = interpolate_macros(
-        "[System Note: Write {{char}}'s next in-character response to {{user}}. "
-        "Format mandate: wrap all actions, gestures, and narration in *asterisks*, and all spoken dialogue in \"quotes\". "
-        "Embody {{char}}'s distinct voice and personality. Do NOT speak, decide, or act for {{user}}.]",
+        "[System Directive: Write {{char}}'s next in-character response to {{user}}. "
+        "STRICT MANDATE: Do NOT write third-person meta-preambles (e.g., 'Here is an introduction:', 'Of course!'). "
+        "Begin IMMEDIATELY in-character as {{char}} using *actions in asterisks* and \"spoken dialogue in quotes\". "
+        "Do NOT speak or act for {{user}}.]",
         char_name,
         user_name,
     )
