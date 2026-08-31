@@ -216,15 +216,22 @@ async def stream_chat_completion_generator(
                         full_response_text += stream_buffer
                         yield json.dumps({"event": "token", "token": stream_buffer})
 
+                # Safety fallback: If model wrote everything inside think tag without closing, recover into chat
+                if not full_response_text.strip() and full_thought_text.strip():
+                    logger.warning("[STREAM] ⚠️ Model did not close </think> tag; recovering text into chat response.")
+                    full_response_text = full_thought_text
+                    yield json.dumps({"event": "token", "token": full_response_text})
+
                 logger.info(f"[STREAM] ✅ Finished stream. Generated {token_count} tokens (~{len(full_response_text)} chars). Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
 
         # Save generated assistant response into database
         async with AsyncSessionLocal() as session:
+            final_text = full_response_text.strip() or "*(smiles gently and waits for your response)*"
             assistant_turn = MessageTurnModel(
                 chat_id=chat_id,
                 role="assistant",
                 active_index=0,
-                swipes=[full_response_text.strip()],
+                swipes=[final_text],
                 model_name=model_name,
             )
             session.add(assistant_turn)
