@@ -155,7 +155,7 @@ async def stream_chat_completion_generator(
                                 full_thought_text += reasoning_delta
                                 yield json.dumps({"event": "thought", "thought": reasoning_delta})
 
-                            # 2. Capture standard content tokens with sliding buffer
+                            # 2. Capture standard content tokens with universal think extraction
                             content_delta = delta_obj.get("content", "")
                             if content_delta:
                                 if first_token_time is None:
@@ -164,38 +164,37 @@ async def stream_chat_completion_generator(
                                 stream_buffer += content_delta
 
                                 while stream_buffer:
-                                    if not in_think:
-                                        if "<think>" in stream_buffer:
-                                            before, after = stream_buffer.split("<think>", 1)
-                                            if before:
-                                                token_count += 1
-                                                full_response_text += before
-                                                yield json.dumps({"event": "token", "token": before})
-                                            in_think = True
-                                            stream_buffer = after
-                                        elif any("<think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 7), len(stream_buffer))):
-                                            # Potential partial <think> tag at end of buffer; hold for next chunk
-                                            break
-                                        else:
+                                    # If </think> is encountered, everything before it is thoughts!
+                                    if "</think>" in stream_buffer:
+                                        thought_part, after = stream_buffer.split("</think>", 1)
+                                        clean_thought = thought_part.replace("<think>", "").strip()
+                                        if clean_thought:
+                                            full_thought_text += clean_thought
+                                            yield json.dumps({"event": "thought", "thought": clean_thought})
+                                        in_think = False
+                                        stream_buffer = after.lstrip("\n")
+                                    elif "<think>" in stream_buffer:
+                                        before, after = stream_buffer.split("<think>", 1)
+                                        if before and not in_think:
                                             token_count += 1
-                                            full_response_text += stream_buffer
-                                            yield json.dumps({"event": "token", "token": stream_buffer})
-                                            stream_buffer = ""
-                                    else:
-                                        if "</think>" in stream_buffer:
-                                            thought_part, after = stream_buffer.split("</think>", 1)
-                                            if thought_part:
-                                                full_thought_text += thought_part
-                                                yield json.dumps({"event": "thought", "thought": thought_part})
-                                            in_think = False
-                                            stream_buffer = after
-                                        elif any("</think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 8), len(stream_buffer))):
-                                            # Potential partial </think> tag at end of buffer; hold for next chunk
+                                            full_response_text += before
+                                            yield json.dumps({"event": "token", "token": before})
+                                        in_think = True
+                                        stream_buffer = after
+                                    elif in_think:
+                                        if any("</think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 8), len(stream_buffer))):
                                             break
-                                        else:
-                                            full_thought_text += stream_buffer
-                                            yield json.dumps({"event": "thought", "thought": stream_buffer})
-                                            stream_buffer = ""
+                                        full_thought_text += stream_buffer
+                                        yield json.dumps({"event": "thought", "thought": stream_buffer})
+                                        stream_buffer = ""
+                                    else:
+                                        # If buffer might contain upcoming <think> or </think>, hold
+                                        if any("<think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 7), len(stream_buffer))) or any("</think>".startswith(stream_buffer[i:]) for i in range(max(0, len(stream_buffer) - 8), len(stream_buffer))):
+                                            break
+                                        token_count += 1
+                                        full_response_text += stream_buffer
+                                        yield json.dumps({"event": "token", "token": stream_buffer})
+                                        stream_buffer = ""
 
                             # Capture server-calculated usage statistics if provided
                             usage = chunk.get("usage")
