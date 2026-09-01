@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from app.core.memory_retriever import memory_retriever
 from app.db.models import CharacterModel, PersonaModel, MessageTurnModel
 
 # LAYER 1: XML-Semantic Global System Directives & Inviolable Persona Mandate
@@ -155,6 +156,7 @@ class TokenBudgetManager:
             "auxiliary": 0,
             "few_shot": 0,
             "pinned": 0,
+            "recalled": 0,
             "conversation": 0,
             "depth_injection": 0,
         }
@@ -290,7 +292,7 @@ def compile_prompt_payload(
     Layer 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
     Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
     FEW-SHOT: Native alternating User & Assistant dialogue example message turns
-    Layer 4: Pinned Permanent Memories (<pinned_memories>) (zero-eviction)
+    Layer 4: Pinned Permanent Memories (<pinned_memories>) & Dynamically Recalled Verbatim Memories (<recalled_memories>)
     Layer 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
     Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Puppeteering, Zero-Emoji & Voice Enforcement at depth=2)
     """
@@ -333,19 +335,13 @@ def compile_prompt_payload(
         budget.count(fs_turn["content"], "few_shot")
         messages.append(fs_turn)
 
-    # LAYER 4: Pinned Permanent Memories XML
-    pinned_block = extract_pinned_turns(turns, char_name, user_name)
-    if pinned_block:
-        pinned_block = interpolate_macros(pinned_block, char_name, user_name)
-        budget.count(pinned_block, "pinned")
-        messages.append({"role": "system", "content": pinned_block})
-
     # Separate unpinned turns for sliding window
     unpinned_turns = [t for t in turns if not getattr(t, "is_pinned", False)]
 
-    # LAYER 5: Sliding Window Chat History (token-budgeted with universal macro interpolation)
+    # Pre-calculate active sliding window turns & track active turn IDs
     history_budget = budget.get_history_budget()
     history_messages: list[dict[str, Any]] = []
+    active_turn_ids: set[str] = set()
     accumulated = 0
 
     for turn in reversed(unpinned_turns):
@@ -362,6 +358,7 @@ def compile_prompt_payload(
         if accumulated + cost > history_budget:
             break
         accumulated += cost
+        active_turn_ids.add(str(getattr(turn, "id", "")))
         history_messages.insert(
             0,
             {
@@ -370,6 +367,32 @@ def compile_prompt_payload(
             },
         )
 
+    # LAYER 4: Pinned Permanent Memories (<pinned_memories>)
+    pinned_block = extract_pinned_turns(turns, char_name, user_name)
+    if pinned_block:
+        pinned_block = interpolate_macros(pinned_block, char_name, user_name)
+        budget.count(pinned_block, "pinned")
+        messages.append({"role": "system", "content": pinned_block})
+
+    # LAYER 4 (DYNAMIC): Local Verbatim Recalled Historical Memories (<recalled_memories>)
+    effective_query = user_input.strip() if user_input else ""
+    if not effective_query and history_messages:
+        # Fallback to the most recent user turn in history if user_input is empty
+        effective_query = next((m["content"] for m in reversed(history_messages) if m["role"] == "user"), "")
+
+    recalled_block = memory_retriever.retrieve_relevant_turns(
+        all_turns=turns,
+        active_turn_ids=active_turn_ids,
+        user_query=effective_query,
+        char_name=char_name,
+        user_name=user_name,
+    )
+    if recalled_block:
+        recalled_block = interpolate_macros(recalled_block, char_name, user_name)
+        budget.count(recalled_block, "recalled")
+        messages.append({"role": "system", "content": recalled_block})
+
+    # LAYER 5: Sliding Window Chat History (token-budgeted with universal macro interpolation)
     budget.counts["conversation"] = accumulated
     messages.extend(history_messages)
 
