@@ -495,7 +495,7 @@ export const PersonaManager: React.FC = () => {
                 <div className="space-y-3">
                   {/* Appearance */}
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1">
+                    <label className="flex items-center gap-1 text-xs font-semibold text-zinc-300 mb-1">
                       <Eye className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Physical Appearance & Attire</span>
                     </label>
@@ -510,7 +510,7 @@ export const PersonaManager: React.FC = () => {
 
                   {/* Personality & Tone */}
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1">
+                    <label className="flex items-center gap-1 text-xs font-semibold text-zinc-300 mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Speech Tone & Personality</span>
                     </label>
@@ -525,7 +525,7 @@ export const PersonaManager: React.FC = () => {
 
                   {/* Role & Backstory */}
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1">
+                    <label className="flex items-center gap-1 text-xs font-semibold text-zinc-300 mb-1">
                       <Compass className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Role & Backstory</span>
                     </label>
