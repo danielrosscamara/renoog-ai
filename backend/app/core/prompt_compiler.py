@@ -65,6 +65,78 @@ def interpolate_macros(text: str | None, char_name: str, user_name: str) -> str:
     return result.strip()
 
 
+def parse_example_dialogues_to_few_shot(
+    mes_example: str | None,
+    char_name: str,
+    user_name: str,
+    max_examples: int = 3,
+) -> list[dict[str, Any]]:
+    """
+    Parses SillyTavern-format <START> example dialogues (mes_example) into native few-shot
+    [{"role": "user", ...}, {"role": "assistant", ...}] message turns.
+    Isolates character speaking style without dumping raw script into system prompt.
+    """
+    if not mes_example or not mes_example.strip():
+        return []
+
+    # Interpolate character and user macros
+    text = interpolate_macros(mes_example, char_name, user_name)
+
+    # Split by <START> or <START_DIALOGUE>
+    blocks = re.split(r"(?:<START>|<START_DIALOGUE>)", text, flags=re.IGNORECASE)
+
+    few_shot_messages: list[dict[str, Any]] = []
+
+    user_prefix_pattern = re.compile(rf"^(?:{re.escape(user_name)}|User|{{{{user}}}}|<USER>):\s*", re.IGNORECASE)
+    char_prefix_pattern = re.compile(rf"^(?:{re.escape(char_name)}|Char|Character|Bot|{{{{char}}}}|<CHAR>|<BOT>):\s*", re.IGNORECASE)
+
+    for block in blocks:
+        lines = [line.strip() for line in block.strip().split("\n") if line.strip()]
+        if not lines:
+            continue
+
+        current_role: str | None = None
+        current_content: list[str] = []
+
+        for line in lines:
+            if user_prefix_pattern.match(line):
+                if current_role and current_content:
+                    few_shot_messages.append({"role": current_role, "content": "\n".join(current_content).strip()})
+                    current_content = []
+                current_role = "user"
+                cleaned = user_prefix_pattern.sub("", line).strip()
+                if cleaned:
+                    current_content.append(cleaned)
+            elif char_prefix_pattern.match(line):
+                if current_role and current_content:
+                    few_shot_messages.append({"role": current_role, "content": "\n".join(current_content).strip()})
+                    current_content = []
+                current_role = "assistant"
+                cleaned = char_prefix_pattern.sub("", line).strip()
+                if cleaned:
+                    current_content.append(cleaned)
+            else:
+                if current_role:
+                    current_content.append(line)
+
+        if current_role and current_content:
+            few_shot_messages.append({"role": current_role, "content": "\n".join(current_content).strip()})
+
+    # Validate strict alternation (user -> assistant)
+    valid_turns: list[dict[str, Any]] = []
+    for msg in few_shot_messages:
+        if not valid_turns:
+            if msg["role"] == "user":
+                valid_turns.append(msg)
+        else:
+            prev_role = valid_turns[-1]["role"]
+            if msg["role"] != prev_role:
+                valid_turns.append(msg)
+
+    # Cap to max_examples pairs to prevent context bloat
+    return valid_turns[: max_examples * 2]
+
+
 class TokenBudgetManager:
     """
     Python port of SillyTavern's TokenHandler class (openai.js:L3325).
@@ -81,8 +153,8 @@ class TokenBudgetManager:
             "persona": 0,
             "character": 0,
             "auxiliary": 0,
+            "few_shot": 0,
             "pinned": 0,
-            "examples": 0,
             "conversation": 0,
             "depth_injection": 0,
         }
@@ -160,13 +232,12 @@ def _build_character_layer(
 ) -> str:
     """
     Builds Layer 3 Character Card XML block with semantic tags and custom prompt item support.
-    Wraps example dialogues in explicit tone-reference containers to prevent verbatim script hallucination.
+    Focuses strictly on declarative identity lore (dialogue scripts are separated into native few-shot turns).
     """
     char_tagline = str(getattr(character, "tagline", "") or "").strip()
     char_personality = str(getattr(character, "personality", "") or "").strip()
     char_scenario = str(getattr(character, "scenario", "") or "").strip()
     char_desc = str(getattr(character, "description", "") or "").strip()
-    char_mes_example = str(getattr(character, "mes_example", "") or "").strip()
     prompt_items = getattr(character, "prompt_items", None) or []
 
     # Dynamic Sparse Lore Synthesis fallback
@@ -198,15 +269,6 @@ def _build_character_layer(
                 if content and tag_name not in {"desc", "scenario", "dialogue", "greeting"}:
                     parts.append(f"  <{tag_name}>\n    {content}\n  </{tag_name}>")
 
-    if char_mes_example:
-        # Wrap in reference-only tag so models do not copy verbatim
-        parts.append(
-            f"  <dialogue_style_reference>\n"
-            f"    <!-- Historical speaking style examples for reference only. Do NOT copy these lines directly unless they naturally fit the conversation. -->\n"
-            f"    {char_mes_example}\n"
-            f"  </dialogue_style_reference>"
-        )
-
     parts.append("</character_profile>")
     raw = "\n".join(parts)
     return interpolate_macros(raw, char_name, user_name)
@@ -227,6 +289,7 @@ def compile_prompt_payload(
     Layer 2: User Persona XML (<user_profile>)
     Layer 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
     Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
+    FEW-SHOT: Native alternating User & Assistant dialogue example message turns
     Layer 4: Pinned Permanent Memories (<pinned_memories>) (zero-eviction)
     Layer 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
     Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Puppeteering, Zero-Emoji & Voice Enforcement at depth=2)
@@ -245,7 +308,7 @@ def compile_prompt_payload(
     layer2 = interpolate_macros(layer2, char_name, user_name)
     budget.count(layer2, "persona")
 
-    # LAYER 3: Character Card XML + Custom Semantic Blocks + Dialogue Reference
+    # LAYER 3: Character Card XML (Pure Declarative Lore)
     layer3 = _build_character_layer(character, char_name, user_name)
     budget.count(layer3, "character")
 
@@ -262,6 +325,13 @@ def compile_prompt_payload(
 
     system_content = "\n\n".join(system_parts)
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
+
+    # NATIVE FEW-SHOT SEPARATED MESSAGE TURNS (Parsed from mes_example)
+    char_mes_example = str(getattr(character, "mes_example", "") or "").strip()
+    few_shot_turns = parse_example_dialogues_to_few_shot(char_mes_example, char_name, user_name)
+    for fs_turn in few_shot_turns:
+        budget.count(fs_turn["content"], "few_shot")
+        messages.append(fs_turn)
 
     # LAYER 4: Pinned Permanent Memories XML
     pinned_block = extract_pinned_turns(turns, char_name, user_name)
