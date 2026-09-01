@@ -12,6 +12,7 @@ import {
   User,
   Layers,
   ChevronRight,
+  Database,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Character, Persona, MessageTurn } from '../../types';
@@ -205,49 +206,68 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         {/* TAB 2: Pinned Memories */}
         {activeRightTab === 'memory' && (
-          <div className="space-y-3 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-[#232326]">
-              <span className="text-xs font-bold text-zinc-200">
-                Layer 4: Permanent Memories ({pinnedTurns.length})
-              </span>
-              <span className="text-[10px] text-zinc-500">Zero-eviction</span>
+          <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Pinned Turns Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#232326]">
+                <span className="text-xs font-bold text-zinc-200">
+                  Layer 4: Permanent Memories ({pinnedTurns.length})
+                </span>
+                <span className="text-[10px] text-zinc-500">Zero-eviction</span>
+              </div>
+
+              {pinnedTurns.length === 0 ? (
+                <div className="text-center py-6 text-zinc-500 text-xs">
+                  <Pin className="w-6 h-6 mx-auto mb-2 opacity-40 text-amber-400" />
+                  <p>No turns pinned in this chat.</p>
+                  <p className="text-[11px] text-zinc-600 mt-1">
+                    Click the 📌 icon on any message to permanently lock it into the model&apos;s memory!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pinnedTurns.map((turn) => {
+                    const roleLabel = turn.role === 'assistant' ? character?.name || 'Character' : persona?.name || 'User';
+                    const text = turn.swipes[turn.active_index] || '';
+                    return (
+                      <div
+                        key={turn.id}
+                        className="p-3 rounded-xl bg-[#18181b] border border-amber-500/30 space-y-1.5 text-xs group"
+                      >
+                        <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                          <span>{roleLabel}</span>
+                          <button
+                            type="button"
+                            onClick={() => togglePinTurn(activeChatId, turn.id)}
+                            className="text-zinc-500 hover:text-red-400 text-[10px]"
+                            title="Unpin memory"
+                          >
+                            Unpin
+                          </button>
+                        </div>
+                        <p className="text-zinc-300 line-clamp-3 leading-relaxed font-sans">{text}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {pinnedTurns.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">
-                <Pin className="w-6 h-6 mx-auto mb-2 opacity-40 text-amber-400" />
-                <p>No turns pinned in this chat.</p>
-                <p className="text-[11px] text-zinc-600 mt-1">
-                  Click the 📌 icon on any message to permanently lock it into the model&apos;s memory!
-                </p>
+            {/* Verbatim Recall Engine Status */}
+            <div className="p-3 rounded-2xl bg-[#18181b] border border-emerald-500/25 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                  <Database className="w-4 h-4" />
+                  <span>Verbatim Recall Engine</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-semibold">
+                  Local BM25
+                </span>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {pinnedTurns.map((turn) => {
-                  const roleLabel = turn.role === 'assistant' ? character?.name || 'Character' : persona?.name || 'User';
-                  const text = turn.swipes[turn.active_index] || '';
-                  return (
-                    <div
-                      key={turn.id}
-                      className="p-3 rounded-xl bg-[#18181b] border border-amber-500/30 space-y-1.5 text-xs group"
-                    >
-                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
-                        <span>{roleLabel}</span>
-                        <button
-                          type="button"
-                          onClick={() => togglePinTurn(activeChatId, turn.id)}
-                          className="text-zinc-500 hover:text-red-400 text-[10px]"
-                          title="Unpin memory"
-                        >
-                          Unpin
-                        </button>
-                      </div>
-                      <p className="text-zinc-300 line-clamp-3 leading-relaxed font-sans">{text}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                100% of historical turns are preserved verbatim in SQLite. When you reference a past event from 50+ turns ago, the exact original messages are dynamically recalled into context in &lt;5ms.
+              </p>
+            </div>
           </div>
         )}
 
