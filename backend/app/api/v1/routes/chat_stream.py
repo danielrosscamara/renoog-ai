@@ -34,6 +34,29 @@ class StreamChatRequest(BaseModel):
     stop: list[str] | None = Field(None, description="Stop sequences to halt generation")
     auxiliary_prompt: str | None = Field(None, description="Optional custom Auxiliary / NSFW / Narrative Focus directive")
 
+# Universal Stop Sequence Registry (Hardware-level generation cutoffs across all model families)
+UNIVERSAL_ROLEPLAY_STOP_SEQUENCES = [
+    # Roleplay Turn Delimiters
+    "\nUser:",
+    "\n{{user}}:",
+    "\n{{user",
+    "\n{{random_user",
+    "\n<START>",
+    # Gemma 3 / Pygmalion / Socratic / Character Card Delimiters
+    "END_OF_DIALOG",
+    "<END_OF_DIALOG>",
+    "[END_OF_DIALOG]",
+    "END_OF_DIALOGUE",
+    "<END_OF_DIALOGUE>",
+    "[End of dialogue]",
+    "[End of conversation]",
+    # Instruct Format Special Tokens
+    "<|im_end|>",
+    "<|im_start|>",
+    "<|eot_id|>",
+    "</s>",
+]
+
 async def stream_chat_completion_generator(
     chat_id: str,
     payload_messages: list[dict],
@@ -230,6 +253,8 @@ async def stream_chat_completion_generator(
             # Clean any trailing hallucinated user turns or macro tags
             final_text = re.sub(r"\n+\{\{(?:random_)?user[\s\S]*$", "", final_text, flags=re.IGNORECASE).strip()
             final_text = re.sub(r"\n+User:[\s\S]*$", "", final_text, flags=re.IGNORECASE).strip()
+            # Clean any trailing EOS delimiters (e.g. END_OF_DIALOG)
+            final_text = re.sub(r"(?:\n|\s)*(?:<|\[)?END_OF_DIALOG(?:UE)?(?:>|\])?\s*$", "", final_text, flags=re.IGNORECASE).strip()
             # Clean any leading assistant meta-preambles (e.g. "Of course! Here's an introduction:")
             final_text = re.sub(r"^(?:(?:Of course|Sure|Certainly)!?\s*)?(?:Here(?:'s| is) (?:a short |an )?(?:introduction|response|reply|look)[\s\S]*?:\s*\n*)", "", final_text, flags=re.IGNORECASE).strip()
             if not final_text:
@@ -254,7 +279,7 @@ async def stream_chat_completion_generator(
             yield json.dumps({
                 "event": "done",
                 "turn_id": str(assistant_turn.id),
-                "full_text": full_response_text.strip(),
+                "full_text": final_text,
                 "thought": full_thought_text.strip(),
                 "speed_tok_s": tok_per_sec,
                 "latency_ms": latency_ms,
@@ -347,15 +372,9 @@ async def stream_chat_response(
     auto_stop = [
         f"\n{user_name}:",
         f"\n{char_name}:",
-        "\nUser:",
-        "\n{{user}}:",
-        "\n{{user",
-        "\n{{random_user",
-        "\n{{char}}:",
-        "\n{{char",
         f"\n<{user_name}>",
         f"\n<{char_name}>",
-        "\n<START>",
+        *UNIVERSAL_ROLEPLAY_STOP_SEQUENCES,
     ]
     combined_stop = list(set((req.stop or []) + auto_stop))
 
