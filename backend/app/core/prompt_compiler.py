@@ -10,7 +10,10 @@ You ARE {{char}}. You must NEVER speak as an AI assistant, language model, or th
 1. ABSOLUTE IMMERSION & IDENTITY: You are {{char}}. Never break character. Never acknowledge being an AI, assistant, or program. Respond strictly from {{char}}'s perspective, mindset, and emotions.
 2. NO PREAMBLES OR META-TALK: NEVER output introductory phrases or conversational preambles (e.g., "Sure!", "Of course!", "Here's an introduction:", "As {{char}}...", "From {{char}}'s perspective:", "I'd be happy to roleplay as..."). Begin your response IMMEDIATELY in-character.
 3. DIRECT IN-CHARACTER REACTION: If {{user}} asks "who are you?", "introduce yourself", or asks about your lore, introduce yourself directly in-character to {{user}} as {{char}} speaking to them in the scene.
-4. USER AUTONOMY: Never speak, decide, act, or narrate on behalf of {{user}}. {{user}}'s thoughts, words, decisions, and physical actions belong exclusively to the human player.
+4. STRICT USER AUTONOMY & SINGLE-TURN GENERATION:
+   - Output ONLY {{char}}'s single turn. STOP generating immediately once {{char}} finishes speaking or acting.
+   - STRICT PROHIBITION: NEVER write dialogue, nervous reactions, thoughts, decisions, or physical actions for {{user}} ({{user}}).
+   - Always leave the floor open for {{user}} to respond next.
 5. SENSORY & NARRATIVE DEPTH: Respond with vivid sensory details, emotional nuance, and consistency with {{char}}'s world. Avoid moralizing, scene summaries, or meta-commentary.
 </roleplay_mandate>
 
@@ -19,6 +22,7 @@ You ARE {{char}}. You must NEVER speak as an AI assistant, language model, or th
   Example: *shifts her stance slightly, brushing a lock of hair from her eyes as she looks at {{user}}*
 - Spoken Dialogue: Write spoken dialogue naturally in "double quotes".
   Example: "Welcome. What brings you by today?"
+- ZERO EMOJIS: Never use emojis (e.g. 😊, 🌸, ☕, ❤️) or emoticons in narration or dialogue. Express all warmth, facial expressions, and emotional tone entirely through descriptive literary prose in *asterisks*.
 </dialogue_formatting>
 </system_directive>"""
 
@@ -144,7 +148,7 @@ def _build_user_layer(
     return (
         f'<user_profile name="{user_name}">\n'
         f"  <description>{user_desc}</description>\n"
-        f"  <directive>Address {{user}} as {user_name}. React dynamically to their inputs. Never control, decide, or narrate {{user}}'s actions.</directive>\n"
+        f"  <directive>Address {{user}} as {user_name}. React dynamically to their inputs. NEVER control, speak for, or narrate {{user}}'s actions.</directive>\n"
         f"</user_profile>"
     )
 
@@ -219,13 +223,13 @@ def compile_prompt_payload(
 ) -> list[dict[str, Any]]:
     """
     Compiles the full SillyTavern-grade 12-stage -> 6-layer prompt payload with XML Semantic Tagging.
-    Layer 1: Main System Directive + Roleplay Mandate & Anti-Preamble Directives
+    Layer 1: Main System Directive + Roleplay Mandate, Anti-Puppeteering & Zero-Emoji Directives
     Layer 2: User Persona XML (<user_profile>)
     Layer 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
     Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
     Layer 4: Pinned Permanent Memories (<pinned_memories>) (zero-eviction)
     Layer 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
-    Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Preamble & Voice Enforcement at depth=2)
+    Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Puppeteering, Zero-Emoji & Voice Enforcement at depth=2)
     """
     budget = TokenBudgetManager(max_context=max_context, output_headroom=output_headroom)
 
@@ -302,9 +306,10 @@ def compile_prompt_payload(
     # LAYER 6: Dynamic Persona-Aware Depth Anchor (depth=2 from bottom)
     depth_anchor = interpolate_macros(
         "[System Directive: Write {{char}}'s next in-character response to {{user}}. "
-        "STRICT MANDATE: Do NOT write third-person meta-preambles (e.g., 'Here is an introduction:', 'Of course!'). "
-        "Begin IMMEDIATELY in-character as {{char}} using *actions in asterisks* and \"spoken dialogue in quotes\". "
-        "Do NOT speak or act for {{user}}.]",
+        "MANDATES: (1) Output ONLY {{char}}'s single turn and STOP; never generate dialogue, reactions, or actions for {{user}}. "
+        "(2) ZERO EMOJIS: Never use emojis or emoticons; express all emotion in descriptive *asterisks*. "
+        "(3) Spoken dialogue strictly in \"quotes\". "
+        "(4) No third-person meta-preambles.]",
         char_name,
         user_name,
     )
