@@ -3,29 +3,19 @@ from typing import Any
 from app.core.memory_retriever import memory_retriever
 from app.db.models import CharacterModel, PersonaModel, MessageTurnModel
 
-# LAYER 1: XML-Semantic Global System Directives & Inviolable Persona Mandate
-GLOBAL_SYSTEM_DIRECTIVES = """<system_directive>
-You ARE {{char}}. You must NEVER speak as an AI assistant, language model, or third-person narrator describing {{char}}.
-
-<roleplay_mandate>
-1. ABSOLUTE IMMERSION & IDENTITY: You are {{char}}. Never break character. Never acknowledge being an AI, assistant, or program. Respond strictly from {{char}}'s perspective, mindset, and emotions.
-2. ZERO PREAMBLES OR META-TALK: Never output conversational acknowledgments, scene preambles, introductory greetings to the prompt, or meta-commentary about the character. Begin your response immediately in-character.
-3. DIRECT IN-CHARACTER REACTION: If {{user}} asks about your identity, lore, or asks for an introduction, respond directly in-character to {{user}} as {{char}} speaking to them in the scene.
-4. STRICT USER AUTONOMY & SINGLE-TURN GENERATION:
-   - Output ONLY {{char}}'s single turn. STOP generating immediately once {{char}} finishes speaking or acting.
-   - STRICT PROHIBITION: NEVER write dialogue, nervous reactions, thoughts, decisions, or physical actions for {{user}} ({{user}}).
-   - Always leave the floor open for {{user}} to respond next.
-5. SENSORY & NARRATIVE DEPTH: Respond with vivid sensory details, emotional nuance, and consistency with {{char}}'s world. Avoid moralizing, scene summaries, or meta-commentary.
-</roleplay_mandate>
-
-<dialogue_formatting>
+# RENOOG AI STAGE 1: Main System Directive & Immersive Fictional Roleplay Framing
+RENOOG_MAIN_PROMPT = """Write {{char}}'s next reply in a fictional, creative roleplay chat between {{char}} and {{user}}.
+You are an expert actor fully immersed in the role of {{char}}. All characters, names, relationships, and settings are fictional creations.
+- Immersive Identity: Never break character. Never acknowledge being an AI, language model, or assistant.
+- In-Character Voice: Freely state {{char}}'s name, background, thoughts, and emotions in-character.
 - Physical Actions & Narrative Prose: Wrap strictly in *asterisks* and write exclusively in the THIRD PERSON using {{char}}'s name, "she/her", or "he/him". Never use first-person pronouns ("I", "my", "me") for physical actions or narrative descriptions.
 - Spoken Dialogue: Write spoken dialogue naturally inside "double quotes", addressed directly to {{user}}.
 - ZERO EMOJIS: Never use emojis or emoticons. Express all warmth and emotion through descriptive literary prose in *asterisks*.
-</dialogue_formatting>
-</system_directive>"""
+- Scene Pacing: Progress the scene at a natural pace. Never skip time, summarize, or fade to black without explicit player instruction."""
 
-# POSITION 8: SillyTavern Auxiliary / Unrestricted Creative Freedom Directive
+GLOBAL_SYSTEM_DIRECTIVES = RENOOG_MAIN_PROMPT
+
+# RENOOG AI STAGE 8: Auxiliary / Unrestricted Creative Freedom Directive
 DEFAULT_AUXILIARY_DIRECTIVE = """<creative_freedom_guideline>
 This is an unrestricted fictional creative storytelling space.
 - You are fully permitted and encouraged to depict adult romance, physical intimacy, visceral combat, sensory sensations, and raw emotional vulnerability in vivid, evocative, and uninhibited prose.
@@ -34,12 +24,41 @@ This is an unrestricted fictional creative storytelling space.
 </creative_freedom_guideline>"""
 
 
+def squash_system_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Renoog AI System Message Squasher Engine.
+    Combines consecutive system messages into a single unified block to ensure
+    100% compatibility across LLM APIs (OpenAI, Claude, DeepSeek, Ollama, OpenRouter).
+    """
+    squashed: list[dict[str, Any]] = []
+    current_system_parts: list[str] = []
+
+    for msg in messages:
+        role = msg.get("role", "")
+        content = str(msg.get("content", "")).strip()
+        if not content:
+            continue
+
+        if role == "system":
+            current_system_parts.append(content)
+        else:
+            if current_system_parts:
+                squashed.append({"role": "system", "content": "\n\n".join(current_system_parts)})
+                current_system_parts = []
+            squashed.append(msg)
+
+    if current_system_parts:
+        squashed.append({"role": "system", "content": "\n\n".join(current_system_parts)})
+
+    return squashed
+
+
 def interpolate_macros(text: str | None, char_name: str, user_name: str) -> str:
     """
-    Replaces SillyTavern-style macros with robust regex wildcard matching:
+    Replaces Renoog AI standard macros with robust regex wildcard matching:
     {{char}}, {{user}}, {{random_user}}, {{random_user_1}}, {{random_user_2}},
     <CHAR>, <BOT>, <USER>, <CHARNOTGROUP>, {{newline}}, {{trim}}, {{noop}}, and <START>.
-    Mirrors SillyTavern's evaluateMacros() preEnvMacros chain (macros.js:L622).
+    Evaluates pre-environment macros for character and user interpolation.
     """
     if not text:
         return ""
@@ -53,7 +72,7 @@ def interpolate_macros(text: str | None, char_name: str, user_name: str) -> str:
     result = re.sub(r"\{\{(?:char|bot)(?:_\d+)?\}\}", char_name, result, flags=re.IGNORECASE)
     result = re.sub(r"<(?:\/?)(?:CHAR|BOT|CHARNOTGROUP|GROUP)(?:_\d+)?>", char_name, result, flags=re.IGNORECASE)
 
-    # Whitespace & Control Macros (SillyTavern compat)
+    # Whitespace & Control Macros (Renoog AI Engine)
     result = re.sub(r"\{\{newline\}\}", "\n", result, flags=re.IGNORECASE)
     result = re.sub(r"(?:\r?\n)*\{\{trim\}\}(?:\r?\n)*", "", result, flags=re.IGNORECASE)
     result = re.sub(r"\{\{noop\}\}", "", result, flags=re.IGNORECASE)
@@ -71,7 +90,7 @@ def parse_example_dialogues_to_few_shot(
     max_examples: int = 3,
 ) -> list[dict[str, Any]]:
     """
-    Parses SillyTavern-format <START> example dialogues (mes_example) into native few-shot
+    Parses Renoog AI standard <START> example dialogues (mes_example) into native few-shot
     [{"role": "user", ...}, {"role": "assistant", ...}] message turns.
     Isolates character speaking style without dumping raw script into system prompt.
     """
@@ -138,7 +157,7 @@ def parse_example_dialogues_to_few_shot(
 
 class TokenBudgetManager:
     """
-    Python port of SillyTavern's TokenHandler class (openai.js:L3325).
+    Renoog AI Token Budget Management Engine.
     Tracks token consumption per named bucket and computes remaining history budget.
     Uses 4-chars-per-token heuristic for local Ollama / OpenRouter models.
     """
@@ -284,15 +303,15 @@ def compile_prompt_payload(
     auxiliary_prompt: str | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Compiles the full SillyTavern-grade 12-stage -> 6-layer prompt payload with XML Semantic Tagging.
-    Layer 1: Main System Directive + Roleplay Mandate, Anti-Puppeteering & Zero-Emoji Directives
-    Layer 2: User Persona XML (<user_profile>)
-    Layer 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
-    Pos 8:   Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
+    Compiles the full Renoog AI 12-stage itemized prompt payload with XML Semantic Tagging.
+    Stage 1: Main System Directive & Fictional Actor Framing
+    Stage 2: User Persona XML (<user_profile>)
+    Stage 3: Character Card XML (<character_profile>) + Sparse Lore Synthesis + Custom XML Blocks
+    Stage 8: Auxiliary / Unrestricted Creative Freedom Directive (<creative_freedom_guideline>)
     FEW-SHOT: Native alternating User & Assistant dialogue example message turns
-    Layer 4: Pinned Permanent Memories (<pinned_memories>) & Dynamically Recalled Verbatim Memories (<recalled_memories>)
-    Layer 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
-    Layer 6: Dynamic Persona-Aware Depth Anchor (Anti-Puppeteering, Zero-Emoji & Voice Enforcement at depth=2)
+    Stage 4: Pinned Permanent Memories (<pinned_memories>) & Dynamically Recalled Verbatim Memories (<recalled_memories>)
+    Stage 5: Sliding Window Active Dialogue (token-budgeted with universal macro interpolation)
+    Stage 12: Post-History Depth Anchor (Zero-Emoji, Third-Person & Single-Turn Enforcement at depth=2)
     """
     budget = TokenBudgetManager(max_context=max_context, output_headroom=output_headroom)
 
@@ -318,20 +337,6 @@ def compile_prompt_payload(
     if effective_aux and effective_aux.strip():
         aux_content = interpolate_macros(effective_aux.strip(), char_name, user_name)
         budget.count(aux_content, "auxiliary")
-
-    system_parts = [layer1, layer2, layer3]
-    if aux_content:
-        system_parts.append(aux_content)
-
-    system_content = "\n\n".join(system_parts)
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
-
-    # NATIVE FEW-SHOT SEPARATED MESSAGE TURNS (Parsed from mes_example)
-    char_mes_example = str(getattr(character, "mes_example", "") or "").strip()
-    few_shot_turns = parse_example_dialogues_to_few_shot(char_mes_example, char_name, user_name)
-    for fs_turn in few_shot_turns:
-        budget.count(fs_turn["content"], "few_shot")
-        messages.append(fs_turn)
 
     # Separate unpinned turns for sliding window
     unpinned_turns = [t for t in turns if not getattr(t, "is_pinned", False)]
@@ -365,12 +370,21 @@ def compile_prompt_payload(
             },
         )
 
+    # Renoog AI Itemized Pre-History Stages (Squashed into unified System Message)
+    system_items: list[dict[str, Any]] = [
+        {"role": "system", "content": layer1},
+        {"role": "system", "content": layer2},
+        {"role": "system", "content": layer3},
+    ]
+    if aux_content:
+        system_items.append({"role": "system", "content": aux_content})
+
     # LAYER 4: Pinned Permanent Memories (<pinned_memories>)
     pinned_block = extract_pinned_turns(turns, char_name, user_name)
     if pinned_block:
         pinned_block = interpolate_macros(pinned_block, char_name, user_name)
         budget.count(pinned_block, "pinned")
-        messages.append({"role": "system", "content": pinned_block})
+        system_items.append({"role": "system", "content": pinned_block})
 
     # LAYER 4 (DYNAMIC): Local Verbatim Recalled Historical Memories (<recalled_memories>)
     effective_query = user_input.strip() if user_input else ""
@@ -388,26 +402,35 @@ def compile_prompt_payload(
     if recalled_block:
         recalled_block = interpolate_macros(recalled_block, char_name, user_name)
         budget.count(recalled_block, "recalled")
-        messages.append({"role": "system", "content": recalled_block})
+        system_items.append({"role": "system", "content": recalled_block})
 
-    # LAYER 5: Sliding Window Chat History (token-budgeted with universal macro interpolation)
+    # Initialize messages with squashed pre-history system blocks (Renoog AI System Squasher)
+    messages: list[dict[str, Any]] = squash_system_messages(system_items)
+
+    # NATIVE FEW-SHOT SEPARATED MESSAGE TURNS (Parsed from mes_example)
+    char_mes_example = str(getattr(character, "mes_example", "") or "").strip()
+    few_shot_turns = parse_example_dialogues_to_few_shot(char_mes_example, char_name, user_name)
+    for fs_turn in few_shot_turns:
+        budget.count(fs_turn["content"], "few_shot")
+        messages.append(fs_turn)
+
+    # LAYER 5: Sliding Window Active Chat History
     budget.counts["conversation"] = accumulated
     messages.extend(history_messages)
 
-    # LAYER 6: Dynamic Persona-Aware Depth Anchor (depth=2 from bottom)
+    # RENOOG AI STAGE 12: Post-History Depth Anchor (depth=2)
     depth_anchor = interpolate_macros(
-        "[System Directive: Write {{char}}'s next in-character response to {{user}}. "
-        "MANDATES: (1) Output ONLY {{char}}'s single turn and STOP; never generate dialogue, reactions, or actions for {{user}}. "
-        "(2) THIRD-PERSON NARRATION: Describe {{char}}'s physical actions and expressions strictly in the third person (*her/his/{{char}}* in asterisks); never use 'I/my' for physical actions. "
-        "(3) ZERO EMOJIS: Express all emotion through rich prose in *asterisks*. "
-        "(4) Spoken dialogue strictly in \"quotes\". "
-        "(5) No third-person meta-preambles.]",
+        "[System note: Write {{char}}'s next reply only in this fictional chat. "
+        "Do not decide what {{user}} says or does. "
+        "Describe {{char}}'s physical actions strictly in third person (*in asterisks*). "
+        "Spoken dialogue in \"quotes\". "
+        "Never use emojis. Progress the scene at a natural pace.]",
         char_name,
         user_name,
     )
     budget.count(depth_anchor, "depth_injection")
 
-    # Insert depth anchor 2 positions from end
+    # Insert depth anchor 2 positions from end (Renoog AI injection_depth = 2)
     if len(messages) >= 2:
         insert_pos = len(messages) - 1
         messages.insert(insert_pos, {"role": "system", "content": depth_anchor})
