@@ -198,15 +198,37 @@ export const App: React.FC = () => {
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const tokenDropdownRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
-  // Auto-scroll to bottom when a new message is added in chat view
+  // Checks if user is near bottom of chat; pauses auto-follow if user scrolled up
+  const handleChatScroll = () => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceToBottom < 120;
+    setIsAtBottom(atBottom);
+    setShowJumpToBottom(!atBottom && distanceToBottom > 200);
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    setIsAtBottom(true);
+    setShowJumpToBottom(false);
+  };
+
+  // Follow tokens dynamically while streaming ONLY if the user is already at the bottom
+  const lastTurnSwipes = activeTurns.length > 0 ? activeTurns[activeTurns.length - 1]?.swipes : undefined;
+  const lastTurnText = lastTurnSwipes?.[lastTurnSwipes.length - 1] || '';
+
   useEffect(() => {
-    if (activeView === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (activeView === 'chat' && isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
     }
-  }, [activeTurns.length, activeView]);
+  }, [activeTurns.length, lastTurnText, isStreaming, activeView, isAtBottom]);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -643,9 +665,13 @@ export const App: React.FC = () => {
 
             {/* Center Chat + Right Sidebar Layout Container */}
             <div className="flex-1 flex overflow-hidden min-h-0">
-              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 {/* Scrollable Message List */}
-                <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto">
+                <div
+                  ref={chatScrollRef}
+                  onScroll={handleChatScroll}
+                  className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto"
+                >
                   {isLoading && activeTurns.length === 0 ? (
                     <ChatTurnSkeleton />
                   ) : activeTurns.map((turn) => {
@@ -721,6 +747,23 @@ export const App: React.FC = () => {
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Floating Jump to Bottom Pill */}
+                {showJumpToBottom && (
+                  <div className="flex justify-center mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <button
+                      type="button"
+                      onClick={() => scrollToBottom(true)}
+                      className="px-3.5 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition-all cursor-pointer border border-indigo-400/40 backdrop-blur-sm"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Jump to bottom</span>
+                      {isStreaming && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
+                      )}
+                    </button>
                   </div>
                 )}
 
