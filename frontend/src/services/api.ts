@@ -198,6 +198,7 @@ export const api = {
     apiKey,
     provider = 'openrouter',
     endpointUrl,
+    signal,
     onToken,
     onThought,
     onDone,
@@ -217,6 +218,7 @@ export const api = {
     apiKey?: string;
     provider?: 'openrouter' | 'ollama' | 'custom';
     endpointUrl?: string;
+    signal?: AbortSignal;
     onToken: (token: string) => void;
     onThought?: (thoughtToken: string) => void;
     onDone: (
@@ -244,6 +246,7 @@ export const api = {
       const res = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
         headers,
+        signal,
         body: JSON.stringify({
           chat_id: chatId,
           user_message: userMessage,
@@ -309,6 +312,10 @@ export const api = {
         }
       }
     } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Stream was aborted by user; exit cleanly
+        return;
+      }
       const msg = error instanceof Error ? error.message : 'Unknown streaming error';
       onError(msg);
     }
