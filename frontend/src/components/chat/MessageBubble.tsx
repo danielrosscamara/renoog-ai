@@ -192,6 +192,27 @@ const formatModelBadge = (turnModel?: string) => {
   return 'Character Card';
 };
 
+/**
+ * Sanitizes roleplay dialogue text by stripping any internal reasoning tags
+ * (<think>...</think> or orphaned </think>) so chat bubbles remain 100% clean story prose.
+ */
+const sanitizeRoleplayText = (raw: string): string => {
+  if (!raw) return '';
+  let cleaned = raw;
+  // Strip complete <think>...</think> blocks
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  // Strip orphaned closing tags or unclosed think tags
+  if (cleaned.includes('</think>')) {
+    const parts = cleaned.split('</think>');
+    cleaned = parts[parts.length - 1];
+  }
+  if (cleaned.includes('<think>')) {
+    const parts = cleaned.split('<think>');
+    cleaned = parts[0];
+  }
+  return cleaned.trim();
+};
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   turn,
   character,
@@ -206,7 +227,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [isEditing, setIsEditing] = useState(false);
 
   const isAssistant = turn.role === 'assistant';
-  const activeContent = turn.swipes[turn.active_index] || turn.swipes[0] || '';
+  const rawContent = turn.swipes[turn.active_index] || turn.swipes[0] || '';
+  const activeContent = sanitizeRoleplayText(rawContent);
   const [editText, setEditText] = useState(activeContent);
 
   const avatar = isAssistant ? character?.avatar_url : persona?.avatar_url;
