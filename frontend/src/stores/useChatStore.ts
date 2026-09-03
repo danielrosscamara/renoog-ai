@@ -58,6 +58,7 @@ export interface ChatState {
   retryLastMessage: (chatId: string) => Promise<void>;
   rerollUserMessage: (chatId: string, userTurnId: string) => Promise<void>;
   generateGhostwriterSuggestion: (chatId: string) => Promise<string>;
+  stopStreaming: () => void;
 }
 
 // Helper: Loads advanced generation samplers and stop sequences from localStorage
@@ -119,7 +120,10 @@ const getStoredProviderConfig = () => {
   };
 };
 
-export const useChatStore = create<ChatState>((set, get) => ({
+// Helper: Active in-flight stream AbortController
+let activeAbortController: AbortController | null = null;
+
+export const useChatStore = create<ChatState>()((set, get) => ({
   characters: [],
   personas: [],
   chats: [],
@@ -140,6 +144,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isRightSidebarOpen: localStorage.getItem('renoog_right_sidebar') !== 'false',
   activeRightTab: (localStorage.getItem('renoog_active_right_tab') as 'thoughts' | 'memory' | 'sheet' | 'world') || 'thoughts',
   latestThoughtTrace: {},
+  stopStreaming: () => {
+    if (activeAbortController) {
+      activeAbortController.abort();
+      activeAbortController = null;
+    }
+    set({ isStreaming: false });
+  },
   toggleRightSidebar: () =>
     set((state) => {
       const next = !state.isRightSidebarOpen;
@@ -349,92 +360,106 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const customAux = localStorage.getItem('renoog_auxiliary_prompt');
     const effectiveAuxPrompt = enableAux ? (customAux || undefined) : '';
 
-    await api.streamChatMessage({
-      chatId,
-      userMessage: text,
-      modelName: storedModel || undefined,
-      provider: providerConfig.provider,
-      endpointUrl: providerConfig.endpointUrl,
-      temperature: storedTemp,
-      topP: samplers.topP,
-      frequencyPenalty: samplers.frequencyPenalty,
-      presencePenalty: samplers.presencePenalty,
-      repetitionPenalty: samplers.repetitionPenalty,
-      maxTokens: samplers.maxTokens,
-      stopSequences: samplers.stopSequences,
-      auxiliaryPrompt: effectiveAuxPrompt,
-      apiKey: storedApiKey || undefined,
-      onThought: (thoughtToken: string) => {
-        set((state) => {
-          const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
-          return {
-            latestThoughtTrace: {
-              ...state.latestThoughtTrace,
-              [chatId]: {
-                ...prev,
-                thought: prev.thought + thoughtToken,
-                isThinking: true,
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeAbortController = new AbortController();
+    const currentSignal = activeAbortController.signal;
+
+    try {
+      await api.streamChatMessage({
+        chatId,
+        userMessage: text,
+        modelName: storedModel || undefined,
+        provider: providerConfig.provider,
+        endpointUrl: providerConfig.endpointUrl,
+        temperature: storedTemp,
+        topP: samplers.topP,
+        frequencyPenalty: samplers.frequencyPenalty,
+        presencePenalty: samplers.presencePenalty,
+        repetitionPenalty: samplers.repetitionPenalty,
+        maxTokens: samplers.maxTokens,
+        stopSequences: samplers.stopSequences,
+        auxiliaryPrompt: effectiveAuxPrompt,
+        apiKey: storedApiKey || undefined,
+        signal: currentSignal,
+        onThought: (thoughtToken: string) => {
+          set((state) => {
+            const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
+            return {
+              latestThoughtTrace: {
+                ...state.latestThoughtTrace,
+                [chatId]: {
+                  ...prev,
+                  thought: prev.thought + thoughtToken,
+                  isThinking: true,
+                },
               },
-            },
-          };
-        });
-      },
-      onToken: (token: string) => {
-        set((state) => {
-          const turns = state.messageTurns[chatId] || [];
-          const updatedTurns = turns.map((turn) => {
-            if (turn.id === assistantTurnId) {
-              const currentSwipe = turn.swipes[0] || '';
-              return {
-                ...turn,
-                swipes: [currentSwipe + token],
-                model_name: storedModel,
-              };
-            }
-            return turn;
+            };
           });
-          return {
-            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
-          };
-        });
-      },
-      onDone: (savedTurnId: string, fullText: string, usage) => {
-        set((state) => {
-          const turns = state.messageTurns[chatId] || [];
-          const updatedTurns = turns.map((turn) => {
-            if (turn.id === assistantTurnId) {
-              return {
-                ...turn,
-                id: savedTurnId,
-                swipes: [fullText],
-                model_name: storedModel,
-              };
-            }
-            return turn;
+        },
+        onToken: (token: string) => {
+          set((state) => {
+            const turns = state.messageTurns[chatId] || [];
+            const updatedTurns = turns.map((turn) => {
+              if (turn.id === assistantTurnId) {
+                const currentSwipe = turn.swipes[0] || '';
+                return {
+                  ...turn,
+                  swipes: [currentSwipe + token],
+                  model_name: storedModel,
+                };
+              }
+              return turn;
+            });
+            return {
+              messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
+            };
           });
-          return {
-            isStreaming: false,
-            latestThoughtTrace: {
-              ...state.latestThoughtTrace,
-              [chatId]: {
-                thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
-                isThinking: false,
-                speedTokS: usage?.speed_tok_s,
-                latencyMs: usage?.latency_ms,
+        },
+        onDone: (savedTurnId: string, fullText: string, usage) => {
+          set((state) => {
+            const turns = state.messageTurns[chatId] || [];
+            const updatedTurns = turns.map((turn) => {
+              if (turn.id === assistantTurnId) {
+                return {
+                  ...turn,
+                  id: savedTurnId,
+                  swipes: [fullText],
+                  model_name: storedModel,
+                };
+              }
+              return turn;
+            });
+            return {
+              isStreaming: false,
+              latestThoughtTrace: {
+                ...state.latestThoughtTrace,
+                [chatId]: {
+                  thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
+                  isThinking: false,
+                  speedTokS: usage?.speed_tok_s,
+                  latencyMs: usage?.latency_ms,
+                },
               },
-            },
-            exactTokenUsage:
-              usage && usage.prompt_tokens > 0
-                ? { ...state.exactTokenUsage, [chatId]: usage }
-                : state.exactTokenUsage,
-            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
-          };
-        });
-      },
-      onError: (err: string) => {
-        set({ isStreaming: false, streamingError: err });
-      },
-    });
+              exactTokenUsage:
+                usage && usage.prompt_tokens > 0
+                  ? { ...state.exactTokenUsage, [chatId]: usage }
+                  : state.exactTokenUsage,
+              messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
+            };
+          });
+        },
+        onError: (err: string) => {
+          set({ isStreaming: false, streamingError: err });
+        },
+      });
+    } finally {
+      if (activeAbortController?.signal === currentSignal) {
+        activeAbortController = null;
+      }
+      set({ isStreaming: false });
+    }
   },
 
   rerollMessage: async (chatId: string, turnId: string) => {
@@ -478,94 +503,108 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const customAux = localStorage.getItem('renoog_auxiliary_prompt');
     const effectiveAuxPrompt = enableAux ? (customAux || undefined) : '';
 
-    await api.streamChatMessage({
-      chatId,
-      userMessage: userPrompt,
-      modelName: storedModel || undefined,
-      provider: providerConfig.provider,
-      endpointUrl: providerConfig.endpointUrl,
-      temperature: storedTemp,
-      topP: samplers.topP,
-      frequencyPenalty: samplers.frequencyPenalty,
-      presencePenalty: samplers.presencePenalty,
-      repetitionPenalty: samplers.repetitionPenalty,
-      maxTokens: samplers.maxTokens,
-      stopSequences: samplers.stopSequences,
-      auxiliaryPrompt: effectiveAuxPrompt,
-      apiKey: storedApiKey || undefined,
-      onThought: (thoughtToken: string) => {
-        set((state) => {
-          const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
-          return {
-            latestThoughtTrace: {
-              ...state.latestThoughtTrace,
-              [chatId]: {
-                ...prev,
-                thought: prev.thought + thoughtToken,
-                isThinking: true,
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeAbortController = new AbortController();
+    const currentSignal = activeAbortController.signal;
+
+    try {
+      await api.streamChatMessage({
+        chatId,
+        userMessage: userPrompt,
+        modelName: storedModel || undefined,
+        provider: providerConfig.provider,
+        endpointUrl: providerConfig.endpointUrl,
+        temperature: storedTemp,
+        topP: samplers.topP,
+        frequencyPenalty: samplers.frequencyPenalty,
+        presencePenalty: samplers.presencePenalty,
+        repetitionPenalty: samplers.repetitionPenalty,
+        maxTokens: samplers.maxTokens,
+        stopSequences: samplers.stopSequences,
+        auxiliaryPrompt: effectiveAuxPrompt,
+        apiKey: storedApiKey || undefined,
+        signal: currentSignal,
+        onThought: (thoughtToken: string) => {
+          set((state) => {
+            const prev = state.latestThoughtTrace[chatId] || { thought: '', isThinking: true };
+            return {
+              latestThoughtTrace: {
+                ...state.latestThoughtTrace,
+                [chatId]: {
+                  ...prev,
+                  thought: prev.thought + thoughtToken,
+                  isThinking: true,
+                },
               },
-            },
-          };
-        });
-      },
-      onToken: (token: string) => {
-        set((state) => {
-          const currentTurns = state.messageTurns[chatId] || [];
-          const updatedTurns = currentTurns.map((turn) => {
-            if (turn.id === turnId) {
-              const currentSwipes = [...turn.swipes];
-              currentSwipes[newSwipeIndex] = (currentSwipes[newSwipeIndex] || '') + token;
-              return {
-                ...turn,
-                swipes: currentSwipes,
-              };
-            }
-            return turn;
+            };
           });
-          return {
-            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
-          };
-        });
-      },
-      onDone: (_savedTurnId: string, fullText: string, usage) => {
-        set((state) => {
-          const currentTurns = state.messageTurns[chatId] || [];
-          const updatedTurns = currentTurns.map((turn) => {
-            if (turn.id === turnId) {
-              const currentSwipes = [...turn.swipes];
-              currentSwipes[newSwipeIndex] = fullText;
-              return {
-                ...turn,
-                swipes: currentSwipes,
-                active_index: newSwipeIndex,
-                model_name: storedModel,
-              };
-            }
-            return turn;
+        },
+        onToken: (token: string) => {
+          set((state) => {
+            const currentTurns = state.messageTurns[chatId] || [];
+            const updatedTurns = currentTurns.map((turn) => {
+              if (turn.id === turnId) {
+                const currentSwipes = [...turn.swipes];
+                currentSwipes[newSwipeIndex] = (currentSwipes[newSwipeIndex] || '') + token;
+                return {
+                  ...turn,
+                  swipes: currentSwipes,
+                };
+              }
+              return turn;
+            });
+            return {
+              messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
+            };
           });
-          return {
-            isStreaming: false,
-            latestThoughtTrace: {
-              ...state.latestThoughtTrace,
-              [chatId]: {
-                thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
-                isThinking: false,
-                speedTokS: usage?.speed_tok_s,
-                latencyMs: usage?.latency_ms,
+        },
+        onDone: (_savedTurnId: string, fullText: string, usage) => {
+          set((state) => {
+            const currentTurns = state.messageTurns[chatId] || [];
+            const updatedTurns = currentTurns.map((turn) => {
+              if (turn.id === turnId) {
+                const currentSwipes = [...turn.swipes];
+                currentSwipes[newSwipeIndex] = fullText;
+                return {
+                  ...turn,
+                  swipes: currentSwipes,
+                  active_index: newSwipeIndex,
+                  model_name: storedModel,
+                };
+              }
+              return turn;
+            });
+            return {
+              isStreaming: false,
+              latestThoughtTrace: {
+                ...state.latestThoughtTrace,
+                [chatId]: {
+                  thought: usage?.thought || state.latestThoughtTrace[chatId]?.thought || '',
+                  isThinking: false,
+                  speedTokS: usage?.speed_tok_s,
+                  latencyMs: usage?.latency_ms,
+                },
               },
-            },
-            exactTokenUsage:
-              usage && usage.prompt_tokens > 0
-                ? { ...state.exactTokenUsage, [chatId]: usage }
-                : state.exactTokenUsage,
-            messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
-          };
-        });
-      },
-      onError: (err: string) => {
-        set({ isStreaming: false, streamingError: err });
-      },
-    });
+              exactTokenUsage:
+                usage && usage.prompt_tokens > 0
+                  ? { ...state.exactTokenUsage, [chatId]: usage }
+                  : state.exactTokenUsage,
+              messageTurns: { ...state.messageTurns, [chatId]: updatedTurns },
+            };
+          });
+        },
+        onError: (err: string) => {
+          set({ isStreaming: false, streamingError: err });
+        },
+      });
+    } finally {
+      if (activeAbortController?.signal === currentSignal) {
+        activeAbortController = null;
+      }
+      set({ isStreaming: false });
+    }
   },
 
   createNewChat: async (characterId: string) => {
