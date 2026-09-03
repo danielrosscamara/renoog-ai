@@ -57,6 +57,17 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   }, [thoughtData.thought, thoughtData.isThinking]);
 
+  // Listen for Escape key to close HUD drawer on smaller screens
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isRightSidebarOpen) {
+        toggleRightSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRightSidebarOpen, toggleRightSidebar]);
+
   if (!isRightSidebarOpen || !activeChatId) return null;
 
   const handleCopyThought = () => {
@@ -67,7 +78,15 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 md:w-96 flex flex-col h-full bg-[#121214] border-l border-[#27272a] shrink-0 z-20 animate-in slide-in-from-right-4 duration-200">
+    <>
+      {/* Mobile/Tablet/Laptop Backdrop Overlay (hidden on xl screens where it docks side-by-side) */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-30 xl:hidden transition-opacity cursor-pointer"
+        onClick={toggleRightSidebar}
+        aria-hidden="true"
+      />
+
+      <aside className="fixed inset-y-0 right-0 z-40 w-80 sm:w-96 xl:static xl:z-20 xl:w-96 flex flex-col h-full bg-[#121214] border-l border-[#27272a] shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl xl:shadow-none">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#27272a] bg-[#18181b]">
         <div className="flex items-center gap-2">
@@ -367,6 +386,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           <ChevronRight className="w-4 h-4 opacity-70" />
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
