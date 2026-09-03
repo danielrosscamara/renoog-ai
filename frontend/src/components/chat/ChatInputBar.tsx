@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Sparkles, Square, Paperclip, Wand2 } from 'lucide-react';
+import { ArrowUp, Sparkles, Square, Paperclip, Wand2, Check, AlertCircle } from 'lucide-react';
 
 export interface ChatInputBarProps {
   onSendMessage: (text: string) => void;
@@ -20,6 +20,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [isGhostwriting, setIsGhostwriting] = useState(false);
+  const [ghostwriterStatus, setGhostwriterStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea based on content
@@ -49,13 +50,19 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
     if (!onGhostwrite || isGhostwriting || isStreaming) return;
     try {
       setIsGhostwriting(true);
+      setGhostwriterStatus('idle');
       const suggestion = await onGhostwrite();
       if (suggestion) {
         setInput((prev) => (prev ? `${prev} ${suggestion}` : suggestion));
+        setGhostwriterStatus('success');
         if (textareaRef.current) {
           textareaRef.current.focus();
         }
+        setTimeout(() => setGhostwriterStatus('idle'), 2000);
       }
+    } catch {
+      setGhostwriterStatus('error');
+      setTimeout(() => setGhostwriterStatus('idle'), 2500);
     } finally {
       setIsGhostwriting(false);
     }
@@ -124,11 +131,33 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
                 type="button"
                 onClick={handleGhostwrite}
                 disabled={isGhostwriting || isStreaming}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 transition-all shadow-xs disabled:opacity-50"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shadow-xs disabled:opacity-50 cursor-pointer ${
+                  ghostwriterStatus === 'success'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : ghostwriterStatus === 'error'
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                    : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25'
+                }`}
                 title="AI Ghostwriter: Draft an in-character action/dialogue for your Persona"
               >
-                <Wand2 className={`w-3.5 h-3.5 text-indigo-400 ${isGhostwriting ? 'animate-spin' : ''}`} />
-                <span>{isGhostwriting ? 'Suggesting...' : '✨ Suggest'}</span>
+                {isGhostwriting ? (
+                  <Wand2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                ) : ghostwriterStatus === 'success' ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : ghostwriterStatus === 'error' ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                ) : (
+                  <Wand2 className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+                <span>
+                  {isGhostwriting
+                    ? 'Suggesting...'
+                    : ghostwriterStatus === 'success'
+                    ? 'Suggested!'
+                    : ghostwriterStatus === 'error'
+                    ? 'Failed'
+                    : '✨ Suggest'}
+                </span>
               </button>
             )}
 
