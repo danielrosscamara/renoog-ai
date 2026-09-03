@@ -41,15 +41,23 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   } = useChatStore();
 
   const [copied, setCopied] = React.useState(false);
+  const thoughtBoxRef = React.useRef<HTMLDivElement>(null);
 
-  if (!isRightSidebarOpen || !activeChatId) return null;
-
-  const thoughtData = latestThoughtTrace[activeChatId] || {
+  const thoughtData = (activeChatId ? latestThoughtTrace[activeChatId] : undefined) || {
     thought: '',
     isThinking: false,
   };
 
   const pinnedTurns = turns.filter((t) => t.is_pinned);
+
+  // Auto-scroll thought trace to bottom as tokens stream in
+  React.useEffect(() => {
+    if (thoughtData.isThinking && thoughtBoxRef.current) {
+      thoughtBoxRef.current.scrollTop = thoughtBoxRef.current.scrollHeight;
+    }
+  }, [thoughtData.thought, thoughtData.isThinking]);
+
+  if (!isRightSidebarOpen || !activeChatId) return null;
 
   const handleCopyThought = () => {
     if (!thoughtData.thought) return;
@@ -85,7 +93,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         <button
           type="button"
           onClick={() => setActiveRightTab('thoughts')}
-          className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold transition-all ${
+          className={`relative flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold transition-all ${
             activeRightTab === 'thoughts'
               ? 'bg-indigo-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#1f1f23]'
@@ -93,6 +101,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Thoughts</span>
+          {thoughtData.isThinking && (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute -top-0.5 -right-0.5" />
+          )}
         </button>
 
         <button
@@ -190,7 +201,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 )}
               </div>
 
-              <div className="p-3 rounded-xl bg-[#121214] border border-[#232326] text-xs font-mono text-zinc-300 leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
+              <div
+                ref={thoughtBoxRef}
+                className="p-3 rounded-xl bg-[#121214] border border-[#232326] text-xs font-mono text-zinc-300 leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap"
+              >
                 {thoughtData.thought ? (
                   thoughtData.thought
                 ) : (
