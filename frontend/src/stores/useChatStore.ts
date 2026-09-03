@@ -942,25 +942,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const persona = state.personas.find((p) => p.id === state.activePersonaId);
     const turns = state.messageTurns[chatId] || [];
 
-    const storedApiKey =
-      localStorage.getItem('renoog_api_key') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').apiKey || '';
-        } catch {
-          return '';
-        }
-      })();
-
-    const storedModel =
-      localStorage.getItem('renoog_model') ||
-      (() => {
-        try {
-          return JSON.parse(localStorage.getItem('renoog_app_settings') || '{}').selectedModel || '';
-        } catch {
-          return '';
-        }
-      })() || 'anthropic/claude-3.5-sonnet';
+    const providerConfig = getStoredProviderConfig();
+    const targetModel = providerConfig.effectiveModel;
+    const targetUrl =
+      providerConfig.provider === 'ollama'
+        ? `${(providerConfig.endpointUrl || 'http://localhost:11434').replace(/\/v1\/?$/, '')}/v1/chat/completions`
+        : providerConfig.provider === 'custom'
+        ? `${(providerConfig.endpointUrl || 'http://localhost:1234/v1').replace(/\/chat\/completions\/?$/, '')}/chat/completions`
+        : 'https://openrouter.ai/api/v1/chat/completions';
 
     const recentDialogue = turns
       .slice(-4)
@@ -970,21 +959,26 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       })
       .join('\n');
 
-    if (!storedApiKey) {
-      return `*smiles at ${character?.name || 'them'} and steps forward* "Tell me more about what you have in mind."`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (providerConfig.provider === 'openrouter') {
+      if (!providerConfig.apiKey) {
+        return `*smiles at ${character?.name || 'them'} and steps forward* "Tell me more about what you have in mind."`;
+      }
+      headers.Authorization = `Bearer ${providerConfig.apiKey}`;
+      headers['HTTP-Referer'] = 'http://localhost:5173';
+      headers['X-Title'] = 'Renoog AI Ghostwriter';
+    } else if (providerConfig.provider === 'custom' && providerConfig.apiKey) {
+      headers.Authorization = `Bearer ${providerConfig.apiKey}`;
     }
 
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch(targetUrl, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${storedApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:5173',
-          'X-Title': 'Renoog AI Ghostwriter',
-        },
+        headers,
         body: JSON.stringify({
-          model: storedModel,
+          model: targetModel,
           messages: [
             {
               role: 'system',
@@ -1002,8 +996,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
       if (!res.ok) throw new Error('Failed to generate ghostwriter suggestion');
       const data = await res.json();
-      const suggestion = data.choices?.[0]?.message?.content?.trim();
-      return suggestion || `*nods in agreement with ${character?.name || 'them'}* "I understand."`;
+      const rawSuggestion = data.choices?.[0]?.message?.content?.trim() || '';
+      // Strip any reasoning tags in case model is a reasoning model
+      const cleanSuggestion = rawSuggestion.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      return cleanSuggestion || `*nods in agreement with ${character?.name || 'them'}* "I understand."`;
     } catch {
       return `*glances at ${character?.name || 'them'} with an intrigued expression* "Let's see where this leads."`;
     }
