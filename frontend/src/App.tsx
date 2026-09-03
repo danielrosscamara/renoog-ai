@@ -39,6 +39,7 @@ export const App: React.FC = () => {
     exactTokenUsage,
     isRightSidebarOpen,
     toggleRightSidebar,
+    stopStreaming,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -727,6 +728,7 @@ export const App: React.FC = () => {
                 <ChatInputBar
                   characterName={currentChar.name}
                   isStreaming={isStreaming}
+                  onStopStreaming={stopStreaming}
                   onSendMessage={(text) => {
                     if (activeChatId) sendMessage(activeChatId, text);
                   }}
