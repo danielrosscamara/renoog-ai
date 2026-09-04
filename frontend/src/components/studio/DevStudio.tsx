@@ -380,12 +380,12 @@ export const DevStudio: React.FC = () => {
                               {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                             </button>
 
-                            {/* Export TavernAI V2 PNG */}
+                            {/* Export Renoog V2 PNG Card */}
                             <button
                               type="button"
                               disabled={exportingId === char.id}
                               onClick={() => handleExportPng(char)}
-                              title="Export TavernAI V2 PNG"
+                              title="Export Renoog V2 PNG Card"
                               className="p-2 rounded-lg bg-[#27272a] hover:bg-indigo-600/20 hover:text-indigo-300 text-zinc-300 transition-colors disabled:opacity-50"
                             >
                               {exportingId === char.id ? (

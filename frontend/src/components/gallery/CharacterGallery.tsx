@@ -204,7 +204,7 @@ export const CharacterGallery: React.FC = () => {
             </h1>
           </div>
           <p className="text-sm text-zinc-400">
-            Choose a companion or drag & drop any image / TavernAI V2 card to import
+            Choose a companion or drag & drop any character card or image to import
           </p>
         </div>
 
@@ -269,10 +269,10 @@ export const CharacterGallery: React.FC = () => {
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white">
-                Drag & drop any TavernAI Card or Image (.png, .jpg, .webp)
+                Drag & drop any Character Card or Image (.png, .jpg, .webp)
               </h4>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Automatically parses TavernAI metadata or creates a customizable character draft.
+                Automatically parses character card metadata or creates a customizable character draft.
               </p>
             </div>
           </div>
@@ -395,7 +395,7 @@ export const CharacterGallery: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      title="Export as TavernAI V2 PNG Card"
+                      title="Export as Renoog V2 PNG Card"
                       onClick={(e) => handleExport(e, character.id)}
                       className="p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-zinc-300 hover:text-white border border-white/10 hover:border-indigo-400/50 transition-all cursor-pointer"
                     >
@@ -485,14 +485,14 @@ export const CharacterGallery: React.FC = () => {
                 <div>
                   <p className="font-semibold text-amber-200">Standard Image (No Embedded Lore)</p>
                   <p className="text-amber-300/80">
-                    This image has no embedded TavernAI card metadata. Customize {editingChar.name}&apos;s backstory, personality, and greeting below:
+                    This image has no embedded character card metadata. Customize {editingChar.name}&apos;s backstory, personality, and greeting below:
                   </p>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                <span>Rich TavernAI V2 Card metadata successfully extracted!</span>
+                <span>Rich Renoog V2 Card metadata successfully extracted!</span>
               </div>
             )}
 

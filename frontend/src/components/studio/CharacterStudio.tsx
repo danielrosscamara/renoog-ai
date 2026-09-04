@@ -796,7 +796,7 @@ export const CharacterStudio: React.FC = () => {
             </div>
           </div>
 
-          {/* Prompt Blocks List (TavernAI Prompt Manager Style) */}
+          {/* Prompt Blocks List (Renoog AI Prompt Manager Style) */}
           <div className="space-y-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between relative">
               <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-300">

@@ -1153,7 +1153,7 @@ export const SettingsView: React.FC = () => {
                       Position 8: Creative Freedom & Auxiliary Directive (NSFW / Mature Content)
                     </span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-orange-500/15 text-orange-300 border border-orange-500/25 font-semibold">
-                      SillyTavern Standard
+                      Renoog AI Standard
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-0.5">

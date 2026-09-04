@@ -90,7 +90,7 @@ Description: ${character.description || 'Unique character in the active story.'}
     character.mes_example ? `\nExample Dialogue:\n${character.mes_example}` : ''
   }`;
 
-  // Position 8: SillyTavern Auxiliary / Unrestricted Creative Freedom Directive
+  // Position 8: Renoog AI Auxiliary / Unrestricted Creative Freedom Directive
   const enableAuxiliary = localStorage.getItem('renoog_enable_auxiliary') !== 'false';
   const customAuxiliary = localStorage.getItem('renoog_auxiliary_prompt');
   const pos8Auxiliary =
@@ -208,7 +208,7 @@ Description: ${character.description || 'Unique character in the active story.'}
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
-                Live inspection of prompt compilation sent to {modelName.split('/')[1] || modelName}
+                Live inspection of prompt compilation sent to {modelName.split('/').pop() || modelName}
               </p>
             </div>
           </div>
@@ -367,7 +367,7 @@ Description: ${character.description || 'Unique character in the active story.'}
                 )}
               </div>
 
-              {/* Position 8: SillyTavern Auxiliary Directive (NSFW / Mature Content) */}
+              {/* Position 8: Renoog AI Auxiliary Directive (NSFW / Mature Content) */}
               <div className="rounded-xl bg-[#121214] border border-[#27272a] overflow-hidden">
                 <button
                   type="button"
@@ -385,7 +385,7 @@ Description: ${character.description || 'Unique character in the active story.'}
                       Pos 8: Auxiliary & Creative Freedom Directive ({enableAuxiliary ? 'Active' : 'Disabled'})
                     </span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-orange-500/15 text-orange-300 border border-orange-500/25 font-semibold">
-                      SillyTavern Pos 8
+                      Renoog Pos 8
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-zinc-500">

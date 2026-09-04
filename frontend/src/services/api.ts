@@ -321,7 +321,7 @@ export const api = {
     }
   },
 
-  // TavernAI PNG Import & Export
+  // Renoog AI PNG Card Import & Export
   async importCharacterFromPng(file: File): Promise<Character> {
     const formData = new FormData();
     formData.append('file', file);

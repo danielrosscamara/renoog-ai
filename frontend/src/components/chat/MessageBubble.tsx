@@ -13,7 +13,7 @@ import type { MessageTurn, Character, Persona } from '../../types';
 
 // ─── Roleplay Prose Renderer ─────────────────────────────────────────────────
 // Renders *action text* as muted italics and regular text as crisp dialogue.
-// Inspired by TavernAI 2's screen1.png typography hierarchy.
+// Renoog AI visual novel typography hierarchy.
 const RoleplayProse: React.FC<{ content: string }> = ({ content }) => {
   // Split content by *action blocks* while preserving the delimiters
   const segments = content.split(/(\*[^*]+\*)/g);

@@ -828,7 +828,7 @@ export const App: React.FC = () => {
         {/* VIEW E: Dev Studio (Admin & Moderation Console) */}
         {activeView === 'studio' && <DevStudio />}
 
-        {/* VIEW F: TavernAI Prompt Manager & Character Studio */}
+        {/* VIEW F: Renoog AI Prompt Manager & Character Studio */}
         {activeView === 'character-studio' && <CharacterStudio />}
       </main>
     </div>
