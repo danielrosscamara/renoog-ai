@@ -21,7 +21,7 @@ interface RightSidebarProps {
   character?: Character;
   persona?: Persona;
   turns: MessageTurn[];
-  onOpenInspector: () => void;
+  onOpenInspector: (tab?: 'layers' | 'raw') => void;
 }
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -376,12 +376,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       <div className="p-3 border-t border-[#27272a] bg-[#141416]">
         <button
           type="button"
-          onClick={onOpenInspector}
+          onClick={() => onOpenInspector('layers')}
           className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-colors"
+          title="Open full 6-layer architecture breakdown"
         >
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
-            <span>Open Full Prompt Inspector</span>
+            <span>Open 6-Layer Architecture</span>
           </div>
           <ChevronRight className="w-4 h-4 opacity-70" />
         </button>
