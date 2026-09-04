@@ -130,7 +130,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   messageTurns: {},
   activeChatId: localStorage.getItem('renoog_last_chat_id') || null,
   activeCharacterId: localStorage.getItem('renoog_last_char_id') || null,
-  activePersonaId: '',
+  activePersonaId: localStorage.getItem('renoog_last_persona_id') || '',
   activeView: (localStorage.getItem('renoog_last_view') as ViewType) || 'chat',
   isSidebarOpen: true,
   isStreaming: false,
@@ -173,14 +173,25 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
       const savedView = (localStorage.getItem('renoog_last_view') as ViewType) || 'chat';
       const savedChatId = localStorage.getItem('renoog_last_chat_id');
+      const savedPersonaId = localStorage.getItem('renoog_last_persona_id');
       const targetChat = chats.find((c) => c.id === savedChatId) || chats[0];
       const defaultPersona = personas.find((p) => p.is_default) || personas[0];
+      const targetPersonaId =
+        savedPersonaId && personas.some((p) => p.id === savedPersonaId)
+          ? savedPersonaId
+          : defaultPersona
+          ? defaultPersona.id
+          : personas[0]?.id || '';
+
+      if (targetPersonaId) {
+        localStorage.setItem('renoog_last_persona_id', targetPersonaId);
+      }
 
       set({
         characters,
         personas,
         chats,
-        activePersonaId: defaultPersona ? defaultPersona.id : (personas[0]?.id || ''),
+        activePersonaId: targetPersonaId,
         activeView: savedView,
         isLoading: false,
       });
@@ -251,6 +262,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   setActivePersona: (personaId: string) => {
+    localStorage.setItem('renoog_last_persona_id', personaId);
     set({ activePersonaId: personaId });
   },
 
@@ -688,6 +700,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   addPersona: async (personaData: Omit<Persona, 'id'>) => {
     try {
       const newPersona = await api.createPersona(personaData);
+      localStorage.setItem('renoog_last_persona_id', newPersona.id);
       set((state) => ({
         personas: [...state.personas, newPersona],
         activePersonaId: newPersona.id,
@@ -696,6 +709,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     } catch {
       const fallbackId = `persona_${Date.now()}`;
       const newPersona: Persona = { ...personaData, id: fallbackId };
+      localStorage.setItem('renoog_last_persona_id', fallbackId);
       set((state) => ({
         personas: [...state.personas, newPersona],
         activePersonaId: fallbackId,
@@ -721,7 +735,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       const newActive =
         state.activePersonaId === id && filtered.length > 0
           ? filtered[0].id
+          : state.activePersonaId === id
+          ? ''
           : state.activePersonaId;
+
+      if (newActive) {
+        localStorage.setItem('renoog_last_persona_id', newActive);
+      } else {
+        localStorage.removeItem('renoog_last_persona_id');
+      }
+
       return { personas: filtered, activePersonaId: newActive };
     });
     try {
