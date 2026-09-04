@@ -21,6 +21,7 @@ export interface PromptInspectorProps {
   modelName: string;
   temperature: number;
   maxTokens?: number;
+  initialTab?: 'layers' | 'raw';
   onClose: () => void;
 }
 
@@ -31,9 +32,17 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
   modelName,
   temperature,
   maxTokens = 8192,
+  initialTab = 'layers',
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'layers' | 'raw'>('layers');
+  const [activeTab, setActiveTab] = useState<'layers' | 'raw'>(initialTab);
+  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
+
+  if (initialTab !== prevInitialTab) {
+    setPrevInitialTab(initialTab);
+    setActiveTab(initialTab);
+  }
+
   const [copied, setCopied] = useState(false);
 
   // Accordion toggle states for all prompt layers & positions
