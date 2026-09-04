@@ -12,7 +12,7 @@ import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
 import { api } from './services/api';
-import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe, Sparkles } from 'lucide-react';
+import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe, Sparkles, Code2 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -43,6 +43,7 @@ export const App: React.FC = () => {
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<'layers' | 'raw'>('layers');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
@@ -624,6 +625,7 @@ export const App: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setIsTokenDropdownOpen(false);
+                          setInspectorTab('raw');
                           setIsInspectorOpen(true);
                         }}
                         className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
@@ -635,15 +637,18 @@ export const App: React.FC = () => {
                   )}
                 </div>
 
-                {/* Prompt Inspector Action Trigger */}
+                {/* Prompt Inspector Action Trigger: Raw JSON Payload */}
                 <button
                   type="button"
-                  onClick={() => setIsInspectorOpen(true)}
+                  onClick={() => {
+                    setInspectorTab('raw');
+                    setIsInspectorOpen(true);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202024] hover:bg-[#27272a] border border-[#2e2e36] hover:border-indigo-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm cursor-pointer"
-                  title="Inspect compiled 6-layer prompt payload"
+                  title="Quick inspect & copy raw compiled JSON payload"
                 >
-                  <Brain className="w-4 h-4 text-indigo-400" />
-                  <span className="hidden sm:inline">Inspect Prompt</span>
+                  <Code2 className="w-4 h-4 text-indigo-400" />
+                  <span className="hidden sm:inline">Raw Prompt</span>
                 </button>
 
                 {/* 3rd Column Companion HUD Toggle Button */}
@@ -786,7 +791,10 @@ export const App: React.FC = () => {
                 character={currentChar}
                 persona={personas.find((p) => p.id === currentChat.persona_id) || currentPersona}
                 turns={activeTurns}
-                onOpenInspector={() => setIsInspectorOpen(true)}
+                onOpenInspector={(tab = 'layers') => {
+                  setInspectorTab(tab);
+                  setIsInspectorOpen(true);
+                }}
               />
             </div>
 
@@ -798,6 +806,7 @@ export const App: React.FC = () => {
                 turns={activeTurns}
                 modelName={currentChat.model_name}
                 temperature={currentChat.temperature}
+                initialTab={inspectorTab}
                 onClose={() => setIsInspectorOpen(false)}
               />
             )}
