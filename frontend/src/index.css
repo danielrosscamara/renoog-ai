@@ -17,3 +17,51 @@ body {
   padding: 0;
   overflow-x: hidden;
 }
+
+/* ==========================================================================
+   Universal Sleek Dark-Mode Scrollbars (Renoog AI Design System)
+   Applies globally across all scrollable containers, modals, and viewports
+   ========================================================================== */
+
+/* Modern W3C Standard (Firefox, modern Chromium) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+
+/* WebKit & Blink Browsers (Chrome, Edge, Safari, Brave, Opera) */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #27272a;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #3f3f46;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: #52525b;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Utility: Completely hide scrollbar while retaining touch/wheel scrolling */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
