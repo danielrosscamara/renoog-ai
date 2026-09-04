@@ -73,6 +73,8 @@ export const App: React.FC = () => {
       ? `⚡ ${customModel}`
       : (activeModel.split('/')[1] || activeModel);
 
+  const activeTemperature = parseFloat(localStorage.getItem('renoog_temp') || String(currentChat?.temperature ?? 0.9));
+
   const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
     const stored = localStorage.getItem('renoog_ollama_model');
     return stored ? [stored] : [];
@@ -804,8 +806,9 @@ export const App: React.FC = () => {
                 character={currentChar}
                 persona={personas.find((p) => p.id === currentChat.persona_id) || currentPersona}
                 turns={activeTurns}
-                modelName={currentChat.model_name}
-                temperature={currentChat.temperature}
+                modelName={activeModel}
+                temperature={activeTemperature}
+                maxTokens={maxContextTokens}
                 initialTab={inspectorTab}
                 onClose={() => setIsInspectorOpen(false)}
               />
