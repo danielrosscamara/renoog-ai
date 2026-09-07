@@ -9,6 +9,8 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { CharacterStudio } from './components/studio/CharacterStudio';
 import { HomeHub } from './components/home/HomeHub';
+import { PERSONA_PRESETS, DEFAULT_PERSONA_PRESET } from './data/personaPresets';
+import type { PersonaPreset } from './types/universe';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
@@ -49,6 +51,12 @@ export const App: React.FC = () => {
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [modelTab, setModelTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
+
+  // Active V2 Persona Preset with persistent local storage
+  const [activePersonaPreset, setActivePersonaPreset] = useState<PersonaPreset>(() => {
+    const storedId = localStorage.getItem('renoog_v2_active_persona_preset');
+    return PERSONA_PRESETS.find((p) => p.id === storedId) || DEFAULT_PERSONA_PRESET;
+  });
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
@@ -841,6 +849,11 @@ export const App: React.FC = () => {
               else if (destination === 'universes') setActiveView('chat');
               else if (destination === 'favorites') setActiveView('gallery');
               else if (destination === 'settings') setActiveView('settings');
+            }}
+            activePersona={activePersonaPreset}
+            onSelectPersona={(preset) => {
+              setActivePersonaPreset(preset);
+              localStorage.setItem('renoog_v2_active_persona_preset', preset.id);
             }}
             userEmail="dale@renoog.ai"
             characterCount={characters.length}
