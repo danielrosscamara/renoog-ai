@@ -12,8 +12,11 @@ import {
   MoreHorizontal,
   Trash2,
   ChevronDown,
-  Check,
-  LayoutDashboard,
+  Home,
+  Mail,
+  User,
+  LogOut,
+  RefreshCw,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Chat } from '../../types';
@@ -155,22 +158,19 @@ export const Sidebar: React.FC = () => {
     chats,
     isLoading,
     characters,
-    personas,
     activeChatId,
     activeCharacterId,
-    activePersonaId,
     activeView,
     isSidebarOpen,
     setActiveChat,
     setActiveView,
-    setActivePersona,
     createNewChat,
     toggleSidebar,
   } = useChatStore();
 
   const [search, setSearch] = useState('');
-  const [personaOpen, setPersonaOpen] = useState(false);
-  const personaRef = useRef<HTMLDivElement>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
 
   const handleNewChat = () => {
     const targetCharId = activeCharacterId || characters[0]?.id;
@@ -179,18 +179,27 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  // Close persona popover on outside click
+  // Close account popover on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (personaRef.current && !personaRef.current.contains(e.target as Node)) {
-        setPersonaOpen(false);
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const activePersona = personas.find((p) => p.id === activePersonaId) || personas[0];
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAccountOpen(false);
+      }
+    };
+    if (accountOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountOpen]);
 
   // Filter chats by search query
   const filteredChats = chats.filter((chat) => {
@@ -258,15 +267,15 @@ export const Sidebar: React.FC = () => {
       <div className="px-3 pb-2 space-y-1">
         <button
           onClick={() => setActiveView('hub')}
-          className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors ${
+          className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
             activeView === 'hub'
               ? 'bg-[#27272a] text-white'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
           }`}
-          title="Command Deck"
+          title="Home"
         >
-          <LayoutDashboard className="w-5 h-5 shrink-0 text-violet-400" />
-          {isSidebarOpen && <span>Command Deck</span>}
+          <Home className="w-5 h-5 shrink-0 text-violet-400" />
+          {isSidebarOpen && <span>Home</span>}
         </button>
 
         <button
@@ -407,69 +416,92 @@ export const Sidebar: React.FC = () => {
           {isSidebarOpen && <span>Settings</span>}
         </button>
 
-        {/* Persona Switcher */}
-        {activePersona && (
-          <div ref={personaRef} className="relative mt-1">
-            <button
-              onClick={() => setPersonaOpen((v) => !v)}
-              className="flex items-center gap-3 w-full p-2 rounded-xl bg-[#202024] border border-[#2e2e36] hover:border-[#3f3f46] transition-colors group"
-            >
-              <img
-                src={activePersona.avatar_url}
-                alt={activePersona.name}
-                className="w-8 h-8 rounded-full object-cover ring-1 ring-emerald-500/50 shrink-0"
-              />
-              {isSidebarOpen && (
-                <>
-                  <div className="flex-1 min-w-0 text-left">
-                    <span className="block text-xs font-bold text-zinc-200 truncate">
-                      {activePersona.name}
-                    </span>
-                    <span className="block text-[10px] text-emerald-400">Active Persona</span>
-                  </div>
-                  <ChevronDown
-                    className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${
-                      personaOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </>
-              )}
-            </button>
-
-            {/* Persona Popover */}
-            {personaOpen && isSidebarOpen && (
-              <div className="absolute bottom-full left-0 right-0 mb-1 rounded-xl bg-[#27272a] border border-[#3f3f46] shadow-xl py-1 z-50">
-                <div className="px-3 py-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Switch Persona
+        {/* Zone 5B: User Account Widget (Moved from HomeHub to Sidebar Footer) */}
+        <div ref={accountRef} className="relative mt-1">
+          <button
+            onClick={() => setAccountOpen((v) => !v)}
+            aria-haspopup="true"
+            aria-expanded={accountOpen}
+            className="flex items-center gap-3 w-full p-2 rounded-xl bg-[#202024] border border-[#2e2e36] hover:border-[#3f3f46] transition-colors group cursor-pointer"
+            title="dale@renoog.ai (Local Account)"
+          >
+            <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform shrink-0">
+              <Mail className="w-4 h-4" />
+            </div>
+            {isSidebarOpen && (
+              <>
+                <div className="flex-1 min-w-0 text-left">
+                  <span className="block text-xs font-semibold text-zinc-200 truncate group-hover:text-indigo-300 transition-colors">
+                    dale@renoog.ai
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
+                    Local Account
+                  </span>
                 </div>
-                {personas.map((persona) => (
-                  <button
-                    key={persona.id}
-                    onClick={() => {
-                      setActivePersona(persona.id);
-                      setPersonaOpen(false);
-                    }}
-                    className="flex items-center gap-3 w-full px-3 py-2 hover:bg-[#3f3f46] transition-colors"
-                  >
-                    <img
-                      src={persona.avatar_url}
-                      alt={persona.name}
-                      className="w-7 h-7 rounded-full object-cover shrink-0"
-                    />
-                    <div className="flex-1 min-w-0 text-left">
-                      <span className="block text-sm text-zinc-200 truncate font-medium">
-                        {persona.name}
-                      </span>
-                    </div>
-                    {persona.id === activePersonaId && (
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    )}
-                  </button>
-                ))}
-              </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${
+                    accountOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </>
             )}
-          </div>
-        )}
+          </button>
+
+          {/* Account Popover (Opens upwards above footer) */}
+          {accountOpen && (
+            <div className="absolute bottom-full left-0 right-0 mb-1.5 rounded-xl bg-[#27272a] border border-[#3f3f46] shadow-2xl p-2.5 z-50 text-xs animate-in fade-in slide-in-from-bottom-2 duration-150 min-w-52.5">
+              <div className="px-2 py-1.5 mb-1 bg-[#18181b] rounded-lg border border-zinc-700/60">
+                <div className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider">
+                  Logged In As
+                </div>
+                <div className="text-xs font-medium text-zinc-100 truncate mt-0.5">
+                  dale@renoog.ai
+                </div>
+                <div className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  Local Workspace Session
+                </div>
+              </div>
+
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setActiveView('settings');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-[#3f3f46] rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <User className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span>View Profile</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setActiveView('settings');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-[#3f3f46] rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span>Account Settings</span>
+                </button>
+
+                <div className="my-1 border-t border-zinc-700/80" />
+
+                <button
+                  onClick={() => {
+                    setAccountOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );
