@@ -8,6 +8,7 @@ import { PersonaManager } from './components/personas/PersonaManager';
 import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { CharacterStudio } from './components/studio/CharacterStudio';
+import { HomeHub } from './components/home/HomeHub';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
@@ -830,6 +831,23 @@ export const App: React.FC = () => {
 
         {/* VIEW F: Renoog AI Prompt Manager & Character Studio */}
         {activeView === 'character-studio' && <CharacterStudio />}
+
+        {/* VIEW G: Central 5-Way Homepage Hub */}
+        {activeView === 'hub' && (
+          <HomeHub
+            onNavigate={(destination) => {
+              if (destination === 'characters') setActiveView('gallery');
+              else if (destination === 'worlds') setActiveView('gallery');
+              else if (destination === 'universes') setActiveView('chat');
+              else if (destination === 'favorites') setActiveView('gallery');
+              else if (destination === 'settings') setActiveView('settings');
+            }}
+            userEmail="dale@renoog.ai"
+            characterCount={characters.length}
+            worldCount={4}
+            universeCount={chats.length}
+          />
+        )}
       </main>
     </div>
   );
