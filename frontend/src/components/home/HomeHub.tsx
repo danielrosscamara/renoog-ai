@@ -172,7 +172,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                 <Mail className="w-3.5 h-3.5" />
               </div>
               <div className="text-left hidden sm:block">
-                <div className="text-xs font-medium text-zinc-200 group-hover:text-indigo-300 transition-colors truncate max-w-[140px]">
+                <div className="text-xs font-medium text-zinc-200 group-hover:text-indigo-300 transition-colors truncate max-w-35">
                   {userEmail}
                 </div>
                 <div className="text-[10px] text-emerald-400 flex items-center gap-1">
