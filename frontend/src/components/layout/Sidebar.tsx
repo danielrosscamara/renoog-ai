@@ -13,6 +13,7 @@ import {
   Trash2,
   ChevronDown,
   Check,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Chat } from '../../types';
@@ -255,6 +256,19 @@ export const Sidebar: React.FC = () => {
 
       {/* Zone 3: Navigation Links */}
       <div className="px-3 pb-2 space-y-1">
+        <button
+          onClick={() => setActiveView('hub')}
+          className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors ${
+            activeView === 'hub'
+              ? 'bg-[#27272a] text-white'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+          }`}
+          title="Command Deck"
+        >
+          <LayoutDashboard className="w-5 h-5 shrink-0 text-violet-400" />
+          {isSidebarOpen && <span>Command Deck</span>}
+        </button>
+
         <button
           onClick={() => setActiveView('gallery')}
           className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors ${
