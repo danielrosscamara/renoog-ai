@@ -60,7 +60,9 @@ export interface Chat {
   updated_at: string;
 }
 
-export type ViewType = 'chat' | 'gallery' | 'personas' | 'settings' | 'studio' | 'character-studio';
+export type ViewType = 'hub' | 'chat' | 'gallery' | 'personas' | 'settings' | 'studio' | 'character-studio';
+
+export * from './universe';
 
 export type LLMProvider = 'openrouter' | 'ollama' | 'custom';
 
