@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Users, 
   Globe, 
@@ -31,9 +31,23 @@ interface HomeHubProps {
   universeCount?: number;
 }
 
+// Optimization: Pure static icon resolver outside component lifecycle
+const renderPersonaIcon = (iconName: string) => {
+  switch (iconName) {
+    case 'Compass':
+      return <Compass className="w-4 h-4 text-emerald-400 shrink-0" />;
+    case 'BookOpen':
+      return <BookOpen className="w-4 h-4 text-amber-400 shrink-0" />;
+    case 'Zap':
+      return <Zap className="w-4 h-4 text-cyan-400 shrink-0" />;
+    default:
+      return <UserCircle className="w-4 h-4 text-indigo-400 shrink-0" />;
+  }
+};
+
 export const HomeHub: React.FC<HomeHubProps> = ({
   onNavigate,
-  activePersona = DEFAULT_PERSONA_PRESET,
+  activePersona,
   onSelectPersona,
   userEmail = 'dale@renoog.ai',
   onSignOut,
@@ -42,20 +56,53 @@ export const HomeHub: React.FC<HomeHubProps> = ({
   worldCount = 4,
   universeCount = 2
 }) => {
+  // Controlled / Uncontrolled hybrid state: internal fallback when activePersona is not passed
+  const [internalPersona, setInternalPersona] = useState<PersonaPreset>(
+    activePersona || DEFAULT_PERSONA_PRESET
+  );
+  const selectedPersona = activePersona ?? internalPersona;
+
+  // Popover Visibility States
   const [isPersonaMenuOpen, setIsPersonaMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
-  const getPersonaIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Compass':
-        return <Compass className="w-4 h-4 text-emerald-400" />;
-      case 'BookOpen':
-        return <BookOpen className="w-4 h-4 text-amber-400" />;
-      case 'Zap':
-        return <Zap className="w-4 h-4 text-cyan-400" />;
-      default:
-        return <UserCircle className="w-4 h-4 text-indigo-400" />;
+  // Bug 2 Fix: Container references for click-outside and Escape key dismissal
+  const personaMenuRef = useRef<HTMLDivElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (personaMenuRef.current && !personaMenuRef.current.contains(target)) {
+        setIsPersonaMenuOpen(false);
+      }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(target)) {
+        setIsAccountMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsPersonaMenuOpen(false);
+        setIsAccountMenuOpen(false);
+      }
+    };
+
+    if (isPersonaMenuOpen || isAccountMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPersonaMenuOpen, isAccountMenuOpen]);
+
+  // Optimization: Offline image fallback handler
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.onerror = null;
+    e.currentTarget.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" fill="%2327272a"/><text x="32" y="38" font-size="20" font-family="sans-serif" font-weight="bold" fill="%23a1a1aa" text-anchor="middle">${selectedPersona.name.charAt(0)}</text></svg>`;
   };
 
   return (
@@ -67,7 +114,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-4 pb-8 border-b border-zinc-800/80">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
             <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
               Living Story Engine
             </span>
@@ -80,29 +127,32 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Dual Control Buttons: Persona & Email Account */}
         <div className="flex items-center gap-3">
           {/* 1. Persona Quick-Select Popover */}
-          <div className="relative">
+          <div ref={personaMenuRef} className="relative">
             <button
               onClick={() => {
                 setIsPersonaMenuOpen(!isPersonaMenuOpen);
                 setIsAccountMenuOpen(false);
               }}
-              className="flex items-center gap-3 px-3.5 py-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl transition-all shadow-sm group"
+              aria-haspopup="true"
+              aria-expanded={isPersonaMenuOpen}
+              className="flex items-center gap-3 px-3.5 py-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl transition-all shadow-sm group cursor-pointer"
               title="Switch In-Game Roleplay Persona"
             >
               <img 
-                src={activePersona.avatar_url} 
-                alt={activePersona.name}
-                className="w-7 h-7 rounded-full object-cover ring-1 ring-indigo-500/50" 
+                src={selectedPersona.avatar_url} 
+                alt={selectedPersona.name}
+                onError={handleImageError}
+                className="w-7 h-7 rounded-full object-cover ring-1 ring-indigo-500/50 shrink-0" 
               />
               <div className="text-left hidden sm:block">
                 <div className="text-xs font-medium text-zinc-200 group-hover:text-indigo-300 transition-colors">
-                  {activePersona.name}
+                  {selectedPersona.name}
                 </div>
                 <div className="text-[10px] text-zinc-400">
-                  {activePersona.title}
+                  {selectedPersona.title}
                 </div>
               </div>
-              {getPersonaIcon(activePersona.icon)}
+              {renderPersonaIcon(selectedPersona.icon)}
             </button>
 
             {/* Persona Dropdown Menu */}
@@ -113,15 +163,16 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                 </div>
                 <div className="space-y-1">
                   {PERSONA_PRESETS.map(preset => {
-                    const isSelected = preset.id === activePersona.id;
+                    const isSelected = preset.id === selectedPersona.id;
                     return (
                       <button
                         key={preset.id}
                         onClick={() => {
+                          setInternalPersona(preset);
                           onSelectPersona?.(preset);
                           setIsPersonaMenuOpen(false);
                         }}
-                        className={`w-full flex items-start gap-3 p-2 rounded-lg text-left transition-all ${
+                        className={`w-full flex items-start gap-3 p-2 rounded-lg text-left transition-all cursor-pointer ${
                           isSelected 
                             ? 'bg-indigo-950/50 border border-indigo-500/30' 
                             : 'hover:bg-zinc-800/60'
@@ -130,7 +181,8 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                         <img 
                           src={preset.avatar_url} 
                           alt={preset.name}
-                          className="w-8 h-8 rounded-full object-cover mt-0.5" 
+                          onError={handleImageError}
+                          className="w-8 h-8 rounded-full object-cover mt-0.5 shrink-0" 
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
@@ -159,16 +211,18 @@ export const HomeHub: React.FC<HomeHubProps> = ({
           </div>
 
           {/* 2. User Email Account Popover */}
-          <div className="relative">
+          <div ref={accountMenuRef} className="relative">
             <button
               onClick={() => {
                 setIsAccountMenuOpen(!isAccountMenuOpen);
                 setIsPersonaMenuOpen(false);
               }}
-              className="flex items-center gap-2.5 px-3.5 py-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl transition-all shadow-sm group"
+              aria-haspopup="true"
+              aria-expanded={isAccountMenuOpen}
+              className="flex items-center gap-2.5 px-3.5 py-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl transition-all shadow-sm group cursor-pointer"
               title="Manage Platform Account"
             >
-              <div className="w-7 h-7 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
+              <div className="w-7 h-7 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform shrink-0">
                 <Mail className="w-3.5 h-3.5" />
               </div>
               <div className="text-left hidden sm:block">
@@ -176,7 +230,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                   {userEmail}
                 </div>
                 <div className="text-[10px] text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
                   Local Account
                 </div>
               </div>
@@ -193,7 +247,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                     {userEmail}
                   </div>
                   <div className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                     Local Workspace Session
                   </div>
                 </div>
@@ -204,9 +258,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                       onManageAccount?.();
                       setIsAccountMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors cursor-pointer"
                   >
-                    <User className="w-4 h-4 text-zinc-400" />
+                    <User className="w-4 h-4 text-zinc-400 shrink-0" />
                     <span>View Profile</span>
                   </button>
 
@@ -215,9 +269,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                       setIsAccountMenuOpen(false);
                       onNavigate('settings');
                     }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg transition-colors cursor-pointer"
                   >
-                    <RefreshCw className="w-4 h-4 text-zinc-400" />
+                    <RefreshCw className="w-4 h-4 text-zinc-400 shrink-0" />
                     <span>Account Settings</span>
                   </button>
 
@@ -228,9 +282,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
                       onSignOut?.();
                       setIsAccountMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
                   >
-                    <LogOut className="w-4 h-4 text-rose-400" />
+                    <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
                     <span>Sign Out</span>
                   </button>
                 </div>
@@ -243,7 +297,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
       {/* Hero Welcome Message */}
       <div className="relative z-10 my-8">
         <h2 className="text-xl md:text-2xl font-semibold text-zinc-100">
-          Welcome back, {activePersona.name}
+          Welcome back, {selectedPersona.name}
         </h2>
         <p className="text-sm text-zinc-400 mt-1 max-w-2xl">
           Account: <span className="text-zinc-300">{userEmail}</span> • Your local world simulation state is preserved. Explore companion cards, configure world lorebooks, or step directly into an active Universe.
@@ -255,9 +309,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Card 1: Characters */}
         <button
           onClick={() => onNavigate('characters')}
-          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-indigo-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm"
+          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-indigo-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition-transform shrink-0">
             <Users className="w-6 h-6" />
           </div>
           <h3 className="text-base font-semibold text-zinc-100 group-hover:text-indigo-300 transition-colors">
@@ -275,9 +329,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Card 2: Worlds & Lore */}
         <button
           onClick={() => onNavigate('worlds')}
-          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-emerald-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm"
+          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-emerald-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-105 transition-transform shrink-0">
             <Globe className="w-6 h-6" />
           </div>
           <h3 className="text-base font-semibold text-zinc-100 group-hover:text-emerald-300 transition-colors">
@@ -295,9 +349,9 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Card 3: Universes */}
         <button
           onClick={() => onNavigate('universes')}
-          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-violet-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm"
+          className="flex flex-col text-left p-6 bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-violet-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.015] shadow-lg group backdrop-blur-sm cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-4 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-4 group-hover:scale-105 transition-transform shrink-0">
             <Sparkles className="w-6 h-6" />
           </div>
           <h3 className="text-base font-semibold text-zinc-100 group-hover:text-violet-300 transition-colors">
@@ -318,7 +372,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Card 4: Recent & Saved Library */}
         <button
           onClick={() => onNavigate('favorites')}
-          className="flex items-center gap-5 p-5 bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/80 hover:border-amber-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.01] shadow-md group text-left"
+          className="flex items-center gap-5 p-5 bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/80 hover:border-amber-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.01] shadow-md group text-left cursor-pointer"
         >
           <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
             <Star className="w-5 h-5" />
@@ -337,7 +391,7 @@ export const HomeHub: React.FC<HomeHubProps> = ({
         {/* Card 5: Local Inference & Settings */}
         <button
           onClick={() => onNavigate('settings')}
-          className="flex items-center gap-5 p-5 bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/80 hover:border-cyan-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.01] shadow-md group text-left"
+          className="flex items-center gap-5 p-5 bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800/80 hover:border-cyan-500/50 rounded-2xl transition-all duration-200 hover:scale-[1.01] shadow-md group text-left cursor-pointer"
         >
           <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
             <Cpu className="w-5 h-5" />
