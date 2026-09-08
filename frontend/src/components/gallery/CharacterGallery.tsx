@@ -1,8 +1,25 @@
 import React, { useState, useRef } from 'react';
-import { Search, MessageSquare, Sparkles, Tag, Plus, Upload, Download, Loader2, AlertCircle, CheckCircle2, X, Edit3, Image as ImageIcon } from 'lucide-react';
+import {
+  Search,
+  MessageSquare,
+  Sparkles,
+  Tag,
+  Plus,
+  Upload,
+  Download,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  X,
+  Edit3,
+  Image as ImageIcon,
+  Compass,
+  Star,
+} from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Character } from '../../types';
 import { CharacterCardSkeleton } from '../common/Skeleton';
+import { CharacterDetailModal } from './CharacterDetailModal';
 
 const GENRE_TAGS = [
   'All',
@@ -51,6 +68,9 @@ export const CharacterGallery: React.FC = () => {
   const [editingChar, setEditingChar] = useState<Character | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Slide-Over Holo-Drawer inspection state
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter characters based on search query and selected genre tags
@@ -74,6 +94,25 @@ export const CharacterGallery: React.FC = () => {
 
   const handleStartChat = (characterId: string) => {
     createNewChat(characterId);
+  };
+
+  const handleCardClick = (character: Character) => {
+    setSelectedCharacter(character);
+  };
+
+  const handleToggleFavorite = async (characterId: string) => {
+    const target = characters.find((c) => c.id === characterId);
+    if (!target) return;
+    const newFavStatus = !target.is_favorite;
+    await updateCharacter(characterId, { is_favorite: newFavStatus });
+    if (selectedCharacter && selectedCharacter.id === characterId) {
+      setSelectedCharacter((prev) => (prev ? { ...prev, is_favorite: newFavStatus } : null));
+    }
+  };
+
+  const handleStartUniverseRoleplay = (character: Character) => {
+    setSelectedCharacter(null);
+    createNewChat(character.id);
   };
 
   const handleFileProcess = async (file: File) => {
@@ -359,7 +398,7 @@ export const CharacterGallery: React.FC = () => {
             {filteredCharacters.map((character: Character) => (
               <div
                 key={character.id}
-                onClick={() => handleStartChat(character.id)}
+                onClick={() => handleCardClick(character)}
                 className="group relative flex flex-col rounded-2xl bg-[#18181b] border border-[#27272a] hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-300 overflow-hidden cursor-pointer"
               >
                 {/* Image Container with Vignette */}
@@ -379,8 +418,30 @@ export const CharacterGallery: React.FC = () => {
                     </span>
                   )}
 
+                  {/* Favorite Badge (shown when not hovered) */}
+                  {character.is_favorite && (
+                    <span className="absolute top-3 right-3 px-1.5 py-1 rounded-md text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 group-hover:opacity-0 transition-opacity">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    </span>
+                  )}
+
                   {/* Card Action Buttons on Image */}
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      title={character.is_favorite ? 'Remove from Favorites' : 'Save to Favorites'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(character.id);
+                      }}
+                      className={`p-1.5 rounded-lg bg-black/60 backdrop-blur-md border transition-all cursor-pointer ${
+                        character.is_favorite
+                          ? 'text-amber-400 border-amber-500/40 hover:bg-amber-500/10'
+                          : 'text-zinc-300 hover:text-white border-white/10 hover:border-amber-400/50'
+                      }`}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${character.is_favorite ? 'fill-amber-400' : ''}`} />
+                    </button>
                     <button
                       type="button"
                       title="Edit in Character Prompt Studio"
@@ -420,11 +481,14 @@ export const CharacterGallery: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => handleStartChat(character.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCardClick(character);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold transition-all cursor-pointer"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Chat</span>
+                      <Compass className="w-3.5 h-3.5" />
+                      <span>View</span>
                     </button>
                   </div>
                 </div>
@@ -609,6 +673,20 @@ export const CharacterGallery: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Slide-Over Holo-Drawer for Deep Inspection & Universe Genesis */}
+      <CharacterDetailModal
+        character={selectedCharacter}
+        isOpen={selectedCharacter !== null}
+        onClose={() => setSelectedCharacter(null)}
+        onStartRoleplay={handleStartUniverseRoleplay}
+        onEditInStudio={(char) => {
+          setEditingCharacter(char);
+          setActiveView('character-studio');
+        }}
+        onToggleFavorite={handleToggleFavorite}
+        onExportPng={exportCharacterPng}
+      />
     </div>
   );
 };
