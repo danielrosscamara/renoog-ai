@@ -35,12 +35,23 @@ const deriveLocationOccupancy = (
 export interface UniverseState {
   // Active Simulation State
   activeUniverse: Universe | null;
-  activeLocationId: string | null;
+  activeLocationId: string | null; // Kept in sync with viewedLocationId for backwards compatibility
+  physicalLocationId: string | null; // Where the player's avatar body is located
+  viewedLocationId: string | null; // Which room is currently rendered on screen in the cockpit
   locations: UniverseLocation[];
   members: UniverseMember[];
   messagesByLocation: Record<string, UniverseMessage[]>;
   timelineEvents: TimelineEvent[];
   turnCount: number;
+
+  // Pending Travel Confirmation Modal State
+  pendingTravel: {
+    targetLocationId: string;
+    availableCompanions: UniverseMember[];
+  } | null;
+
+  // Active Input Channel
+  activeInputChannel: 'player' | 'director';
 
   // Streaming State (Dual-Stage Pipeline)
   isStreaming: boolean;
@@ -68,6 +79,18 @@ export interface UniverseState {
   addNarratorMessage: (content: string, locationId?: string) => void;
   addCharacterMessage: (characterId: string, content: string, locationId?: string) => void;
 
+  // Spatial Spectator & Travel Confirmation Actions
+  spectateLocation: (locationId: string) => void;
+  returnToPhysicalLocation: () => void;
+  openTravelConfirmation: (targetLocationId: string) => void;
+  closeTravelConfirmation: () => void;
+  confirmTravel: (targetLocationId: string, accompanyingCharacterIds?: string[]) => void;
+
+  // Scene Progression & Directing Actions
+  continueRoomScene: (locationId: string) => Promise<void>; // Zero-turn-increment scene beat
+  directNarratorScene: (locationId: string, directive: string) => Promise<void>;
+  setUserInputChannel: (channel: 'player' | 'director') => void;
+
   // Atomic Turn Scenario & Message Management
   setTurnSwipeIndex: (locationId: string, turnNumber: number, newIndex: number) => void;
   rerollEntireTurn: (locationId: string, turnNumber: number) => Promise<void>;
@@ -93,6 +116,10 @@ export const useUniverseStore = create<UniverseState>()(
     (set, get) => ({
       activeUniverse: null,
       activeLocationId: null,
+      physicalLocationId: null,
+      viewedLocationId: null,
+      pendingTravel: null,
+      activeInputChannel: 'player',
       locations: [],
       members: [],
       messagesByLocation: {},
@@ -239,6 +266,10 @@ export const useUniverseStore = create<UniverseState>()(
         set({
           activeUniverse: newUniverse,
           activeLocationId: spawnLocationId,
+          physicalLocationId: spawnLocationId,
+          viewedLocationId: spawnLocationId,
+          pendingTravel: null,
+          activeInputChannel: 'player',
           locations: seededLocations,
           members: seededMembers,
           messagesByLocation: {
@@ -348,7 +379,10 @@ export const useUniverseStore = create<UniverseState>()(
       },
 
       setActiveLocation: (locationId) => {
-        set({ activeLocationId: locationId });
+        set({
+          activeLocationId: locationId,
+          viewedLocationId: locationId,
+        });
       },
 
       moveToLocation: (toLocationId, accompanyingCharacterIds) => {
@@ -357,15 +391,17 @@ export const useUniverseStore = create<UniverseState>()(
           activeUniverse,
           locations,
           members,
+          physicalLocationId,
           activeLocationId,
           messagesByLocation,
           timelineEvents,
           turnCount,
         } = state;
 
-        if (!activeUniverse || !activeLocationId || activeLocationId === toLocationId) return;
+        const currentOriginId = physicalLocationId || activeLocationId;
+        if (!activeUniverse || !currentOriginId || currentOriginId === toLocationId) return;
 
-        const fromLocation = locations.find((l) => l.id === activeLocationId);
+        const fromLocation = locations.find((l) => l.id === currentOriginId);
         const targetLocation = locations.find((l) => l.id === toLocationId);
         if (!targetLocation) return;
 
@@ -374,14 +410,14 @@ export const useUniverseStore = create<UniverseState>()(
 
         // Determine which members travel with the user:
         // 1. The user always moves.
-        // 2. If accompanyingCharacterIds is explicitly provided: only those matching characters currently in fromLocation move.
-        // 3. If accompanyingCharacterIds is omitted: ALL characters currently in fromLocation travel with user.
+        // 2. If accompanyingCharacterIds is explicitly provided: only those matching characters currently in currentOriginId move.
+        // 3. If accompanyingCharacterIds is omitted: ALL characters currently in currentOriginId travel with user.
         // Characters in OTHER rooms stay exactly where they are!
         const updatedMembers = members.map((m) => {
           if (m.entity_type === 'user') {
             return { ...m, current_location_id: toLocationId };
           }
-          if (m.entity_type === 'character' && m.current_location_id === activeLocationId) {
+          if (m.entity_type === 'character' && m.current_location_id === currentOriginId) {
             const shouldMove = accompanyingCharacterIds
               ? accompanyingCharacterIds.includes(m.entity_id) || accompanyingCharacterIds.includes(m.id)
               : true;
@@ -401,36 +437,63 @@ export const useUniverseStore = create<UniverseState>()(
           (m) =>
             m.entity_type === 'character' &&
             m.current_location_id === toLocationId &&
-            members.find((oldM) => oldM.id === m.id)?.current_location_id === activeLocationId
+            members.find((oldM) => oldM.id === m.id)?.current_location_id === currentOriginId
         );
 
-        // Formulate dynamic narrative transition prose
-        let travelNarrative: string;
+        // 1. Dual-Room Departure Narrative in Origin Room (Room A)
+        let departureNarrative: string;
         if (movedCompanions.length === 0) {
-          travelNarrative = `*Departing ${fromLocation?.name || 'the previous room'} alone, you make your way toward ${targetLocation.name}. ${targetLocation.description}*`;
+          departureNarrative = `*Stepping through the doorway alone, you leave ${fromLocation?.name || 'the room'} behind and make your way down the corridor toward ${targetLocation.name}.*`;
         } else if (movedCompanions.length === 1) {
-          travelNarrative = `*Accompanied by ${movedCompanions[0].display_name}, you depart ${fromLocation?.name || 'the previous room'} and arrive at ${targetLocation.name}. ${targetLocation.description}*`;
+          departureNarrative = `*Accompanied by ${movedCompanions[0].display_name}, you depart ${fromLocation?.name || 'the room'}, footsteps echoing into the passage toward ${targetLocation.name}.*`;
         } else {
           const names = movedCompanions.map((c) => c.display_name).join(', ');
-          travelNarrative = `*Alongside ${names}, you make your way from ${fromLocation?.name || 'the previous room'} to ${targetLocation.name}. ${targetLocation.description}*`;
+          departureNarrative = `*Alongside ${names}, you depart ${fromLocation?.name || 'the room'} and make your way toward ${targetLocation.name}.*`;
         }
 
-        const transitionMessage: UniverseMessage = {
-          id: `msg_narrator_travel_${Date.now()}`,
+        const departureMessage: UniverseMessage = {
+          id: `msg_narrator_depart_${Date.now()}`,
+          universe_id: activeUniverse.id,
+          location_id: currentOriginId,
+          sender_type: 'narrator',
+          sender_id: 'narrator',
+          sender_name: 'Narrator',
+          sender_avatar: null,
+          content: departureNarrative,
+          turn_number: nextTurn,
+          active_swipe_index: 0,
+          swipes: [departureNarrative],
+          created_at: now,
+        };
+
+        // 2. Dual-Room Arrival Narrative in Destination Room (Room B)
+        let arrivalNarrative: string;
+        if (movedCompanions.length === 0) {
+          arrivalNarrative = `*Departing ${fromLocation?.name || 'the previous room'} alone, you arrive at ${targetLocation.name}. ${targetLocation.description}*`;
+        } else if (movedCompanions.length === 1) {
+          arrivalNarrative = `*Accompanied by ${movedCompanions[0].display_name}, you arrive at ${targetLocation.name}. ${targetLocation.description}*`;
+        } else {
+          const names = movedCompanions.map((c) => c.display_name).join(', ');
+          arrivalNarrative = `*Alongside ${names}, you arrive at ${targetLocation.name}. ${targetLocation.description}*`;
+        }
+
+        const arrivalMessage: UniverseMessage = {
+          id: `msg_narrator_arrive_${Date.now()}`,
           universe_id: activeUniverse.id,
           location_id: toLocationId,
           sender_type: 'narrator',
           sender_id: 'narrator',
           sender_name: 'Narrator',
           sender_avatar: null,
-          content: travelNarrative,
+          content: arrivalNarrative,
           turn_number: nextTurn,
           active_swipe_index: 0,
-          swipes: [travelNarrative],
+          swipes: [arrivalNarrative],
           created_at: now,
         };
 
-        const existingRoomMessages = messagesByLocation[toLocationId] || [];
+        const existingOriginMessages = messagesByLocation[currentOriginId] || [];
+        const existingTargetMessages = messagesByLocation[toLocationId] || [];
 
         // Log timeline movement event with the exact participants who traveled
         const participantNames = [
@@ -453,22 +516,236 @@ export const useUniverseStore = create<UniverseState>()(
         };
 
         set({
+          physicalLocationId: toLocationId,
+          viewedLocationId: toLocationId,
           activeLocationId: toLocationId,
+          activeInputChannel: 'player',
+          pendingTravel: null,
           locations: updatedLocations,
           members: updatedMembers,
           messagesByLocation: {
             ...messagesByLocation,
-            [toLocationId]: [...existingRoomMessages, transitionMessage],
+            [currentOriginId]: [...existingOriginMessages, departureMessage],
+            [toLocationId]: [...existingTargetMessages, arrivalMessage],
           },
           timelineEvents: [newTimelineEvent, ...timelineEvents],
           turnCount: nextTurn,
         });
       },
 
+      spectateLocation: (locationId) => {
+        const state = get();
+        set({
+          viewedLocationId: locationId,
+          activeLocationId: locationId,
+          activeInputChannel: state.physicalLocationId === locationId ? 'player' : 'director',
+        });
+      },
+
+      returnToPhysicalLocation: () => {
+        const state = get();
+        const target = state.physicalLocationId || state.locations[0]?.id || null;
+        if (target) {
+          set({
+            viewedLocationId: target,
+            activeLocationId: target,
+            activeInputChannel: 'player',
+          });
+        }
+      },
+
+      openTravelConfirmation: (targetLocationId) => {
+        const state = get();
+        const originId = state.physicalLocationId || state.activeLocationId;
+        const availableCompanions = state.members.filter(
+          (m) => m.current_location_id === originId && m.entity_type === 'character' && m.is_active
+        );
+        set({
+          pendingTravel: {
+            targetLocationId,
+            availableCompanions,
+          },
+        });
+      },
+
+      closeTravelConfirmation: () => {
+        set({ pendingTravel: null });
+      },
+
+      confirmTravel: (targetLocationId, accompanyingCharacterIds) => {
+        set({ pendingTravel: null });
+        get().moveToLocation(targetLocationId, accompanyingCharacterIds);
+      },
+
+      continueRoomScene: async (locationId) => {
+        const state = get();
+        if (state.isStreaming) return;
+
+        const { activeUniverse, messagesByLocation, members, turnCount } = state;
+        if (!activeUniverse) return;
+
+        const targetRoomMessages = messagesByLocation[locationId] || [];
+        // Zero turn increment: reuse current turn or last message's turn number
+        const currentTurn =
+          targetRoomMessages.length > 0
+            ? targetRoomMessages[targetRoomMessages.length - 1].turn_number
+            : turnCount;
+
+        const roomCompanions = members.filter(
+          (m) => m.current_location_id === locationId && m.entity_type === 'character' && m.is_active
+        );
+
+        if (roomCompanions.length === 0) {
+          const now = new Date().toISOString();
+          const emptyAmbianceProse = `*The room remains still and quiet. The subtle ambient hum of the facility continues undisturbed.*`;
+          const emptyAmbianceMsg: UniverseMessage = {
+            id: `msg_narrator_beat_${Date.now()}`,
+            universe_id: activeUniverse.id,
+            location_id: locationId,
+            sender_type: 'narrator',
+            sender_id: 'narrator',
+            sender_name: 'Narrator',
+            sender_avatar: null,
+            content: emptyAmbianceProse,
+            turn_number: currentTurn,
+            active_swipe_index: 0,
+            swipes: [emptyAmbianceProse],
+            created_at: now,
+          };
+          set({
+            messagesByLocation: {
+              ...messagesByLocation,
+              [locationId]: [...targetRoomMessages, emptyAmbianceMsg],
+            },
+          });
+          return;
+        }
+
+        const lastSpeaker = targetRoomMessages[targetRoomMessages.length - 1];
+        const nextSpeaker =
+          roomCompanions.find((c) => c.entity_id !== lastSpeaker?.sender_id) || roomCompanions[0];
+
+        const sampleBeats = [
+          `*She pauses, glancing over the readouts with a thoughtful expression.* "We should remain vigilant. The telemetry patterns haven't settled yet."`,
+          `*Adjusting her stance, she takes a quiet breath and looks toward the console.* "If we proceed carefully, we can isolate the fluctuations without triggering a surge."`,
+          `*She examines the surrounding instrumentation, nodding subtly to herself.* "Everything seems stable for the moment, but let's not let our guard down."`,
+        ];
+        const chosenBeat = sampleBeats[Math.floor(Math.random() * sampleBeats.length)];
+        const now = new Date().toISOString();
+
+        const beatMessage: UniverseMessage = {
+          id: `msg_beat_${Date.now()}`,
+          universe_id: activeUniverse.id,
+          location_id: locationId,
+          sender_type: 'character',
+          sender_id: nextSpeaker.entity_id,
+          sender_name: nextSpeaker.display_name,
+          sender_avatar: nextSpeaker.avatar_url,
+          content: chosenBeat,
+          turn_number: currentTurn,
+          active_swipe_index: 0,
+          swipes: [chosenBeat],
+          created_at: now,
+        };
+
+        set({
+          messagesByLocation: {
+            ...messagesByLocation,
+            [locationId]: [...targetRoomMessages, beatMessage],
+          },
+        });
+      },
+
+      directNarratorScene: async (locationId, directive) => {
+        const state = get();
+        if (state.isStreaming || !directive.trim()) return;
+
+        const { activeUniverse, messagesByLocation, members, turnCount } = state;
+        if (!activeUniverse) return;
+
+        const targetRoomMessages = messagesByLocation[locationId] || [];
+        const nextTurn = turnCount + 1;
+        const now = new Date().toISOString();
+
+        // Stage 1: Improvised Narrator Event
+        const improvisedNarratorProse = `*${directive.trim()} The atmosphere shifts abruptly, drawing immediate attention to the unexpected development.*`;
+
+        const narratorEventMsg: UniverseMessage = {
+          id: `msg_narrator_dir_${Date.now()}`,
+          universe_id: activeUniverse.id,
+          location_id: locationId,
+          sender_type: 'narrator',
+          sender_id: 'narrator',
+          sender_name: 'Narrator',
+          sender_avatar: null,
+          content: improvisedNarratorProse,
+          turn_number: nextTurn,
+          active_swipe_index: 0,
+          swipes: [improvisedNarratorProse],
+          created_at: now,
+        };
+
+        // Stage 2: Companion Reactions
+        const roomCompanions = members.filter(
+          (m) => m.current_location_id === locationId && m.entity_type === 'character' && m.is_active
+        );
+
+        const companionReactionMsgs: UniverseMessage[] = roomCompanions.map((comp, idx) => {
+          const reactionProse = `*${comp.display_name} reacts swiftly, eyes widening as she assesses the sudden disturbance.* "Did you feel that? What caused that sudden shift?"`;
+          return {
+            id: `msg_reaction_${Date.now()}_${idx}`,
+            universe_id: activeUniverse.id,
+            location_id: locationId,
+            sender_type: 'character',
+            sender_id: comp.entity_id,
+            sender_name: comp.display_name,
+            sender_avatar: comp.avatar_url,
+            content: reactionProse,
+            turn_number: nextTurn,
+            active_swipe_index: 0,
+            swipes: [reactionProse],
+            created_at: new Date(Date.now() + (idx + 1) * 50).toISOString(),
+          };
+        });
+
+        set({
+          messagesByLocation: {
+            ...messagesByLocation,
+            [locationId]: [...targetRoomMessages, narratorEventMsg, ...companionReactionMsgs],
+          },
+          turnCount: nextTurn,
+        });
+      },
+
+      setUserInputChannel: (channel) => {
+        set({ activeInputChannel: channel });
+      },
+
       addUserMessage: (content) => {
         const state = get();
-        const { activeUniverse, activeLocationId, messagesByLocation, members, turnCount } = state;
-        if (!activeUniverse || !activeLocationId || !content.trim()) return;
+        const {
+          activeUniverse,
+          activeLocationId,
+          physicalLocationId,
+          messagesByLocation,
+          members,
+          turnCount,
+          activeInputChannel,
+        } = state;
+        if (!activeUniverse || !content.trim()) return;
+
+        // If in Director Mode: Route to directNarratorScene!
+        if (activeInputChannel === 'director') {
+          const targetLoc = activeLocationId || physicalLocationId;
+          if (targetLoc) {
+            get().directNarratorScene(targetLoc, content.trim());
+          }
+          return;
+        }
+
+        // In-Character Player Voice:
+        const targetLocId = physicalLocationId || activeLocationId;
+        if (!targetLocId) return;
 
         const userMember = members.find((m) => m.entity_type === 'user');
         const now = new Date().toISOString();
@@ -477,7 +754,7 @@ export const useUniverseStore = create<UniverseState>()(
         const newMessage: UniverseMessage = {
           id: `msg_user_${Date.now()}`,
           universe_id: activeUniverse.id,
-          location_id: activeLocationId,
+          location_id: targetLocId,
           sender_type: 'user',
           sender_id: userMember?.id || 'user',
           sender_name: userMember?.display_name || 'You',
@@ -489,12 +766,12 @@ export const useUniverseStore = create<UniverseState>()(
           created_at: now,
         };
 
-        const roomMessages = messagesByLocation[activeLocationId] || [];
+        const roomMessages = messagesByLocation[targetLocId] || [];
 
         set({
           messagesByLocation: {
             ...messagesByLocation,
-            [activeLocationId]: [...roomMessages, newMessage],
+            [targetLocId]: [...roomMessages, newMessage],
           },
           turnCount: nextTurn,
         });
@@ -851,6 +1128,10 @@ export const useUniverseStore = create<UniverseState>()(
         set({
           activeUniverse: null,
           activeLocationId: null,
+          physicalLocationId: null,
+          viewedLocationId: null,
+          pendingTravel: null,
+          activeInputChannel: 'player',
           locations: [],
           members: [],
           messagesByLocation: {},
@@ -878,6 +1159,9 @@ export const useUniverseStore = create<UniverseState>()(
       partialize: (state) => ({
         activeUniverse: state.activeUniverse,
         activeLocationId: state.activeLocationId,
+        physicalLocationId: state.physicalLocationId,
+        viewedLocationId: state.viewedLocationId,
+        activeInputChannel: state.activeInputChannel,
         locations: state.locations,
         members: state.members,
         messagesByLocation: state.messagesByLocation,
