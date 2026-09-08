@@ -20,6 +20,7 @@ import { useChatStore } from '../../stores/useChatStore';
 import type { Character } from '../../types';
 import { CharacterCardSkeleton } from '../common/Skeleton';
 import { CharacterDetailModal } from './CharacterDetailModal';
+import { WorldPairingDrawer } from '../universe/WorldPairingDrawer';
 
 const GENRE_TAGS = [
   'All',
@@ -70,6 +71,8 @@ export const CharacterGallery: React.FC = () => {
 
   // Slide-Over Holo-Drawer inspection state
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  // Slide-Over World Pairing state
+  const [pairingCharacter, setPairingCharacter] = useState<Character | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,6 +115,11 @@ export const CharacterGallery: React.FC = () => {
 
   const handleStartUniverseRoleplay = (character: Character) => {
     setSelectedCharacter(null);
+    setPairingCharacter(character);
+  };
+
+  const handlePairAndLaunchUniverse = (character: Character) => {
+    setPairingCharacter(null);
     createNewChat(character.id);
   };
 
@@ -686,6 +694,14 @@ export const CharacterGallery: React.FC = () => {
         }}
         onToggleFavorite={handleToggleFavorite}
         onExportPng={exportCharacterPng}
+      />
+
+      {/* Slide-Over World Pairing Drawer for Pairing Character with a World Setting */}
+      <WorldPairingDrawer
+        character={pairingCharacter}
+        isOpen={pairingCharacter !== null}
+        onClose={() => setPairingCharacter(null)}
+        onPairAndLaunch={handlePairAndLaunchUniverse}
       />
     </div>
   );
