@@ -68,11 +68,12 @@ export interface UniverseState {
   addNarratorMessage: (content: string, locationId?: string) => void;
   addCharacterMessage: (characterId: string, content: string, locationId?: string) => void;
 
-  // Message Management & Multi-Swipe Reroll
-  setSwipeIndex: (locationId: string, messageId: string, newIndex: number) => void;
-  rerollUniverseMessage: (locationId: string, messageId: string) => Promise<void>;
+  // Atomic Turn Scenario & Message Management
+  setTurnSwipeIndex: (locationId: string, turnNumber: number, newIndex: number) => void;
+  rerollEntireTurn: (locationId: string, turnNumber: number) => Promise<void>;
   editUniverseMessage: (locationId: string, messageId: string, newContent: string) => void;
   deleteUniverseMessage: (locationId: string, messageId: string) => void;
+  getTurnSwipeInfo: (locationId: string, turnNumber: number) => { activeIndex: number; totalSwipes: number };
 
   setStreaming: (
     isStreaming: boolean,
@@ -590,11 +591,11 @@ export const useUniverseStore = create<UniverseState>()(
         });
       },
 
-      setSwipeIndex: (locationId, messageId, newIndex) => {
+      setTurnSwipeIndex: (locationId, turnNumber, newIndex) => {
         set((state) => {
           const roomMessages = state.messagesByLocation[locationId] || [];
           const updated = roomMessages.map((msg) => {
-            if (msg.id === messageId) {
+            if (msg.turn_number === turnNumber && msg.sender_type !== 'user') {
               const clampedIndex = Math.max(0, Math.min(newIndex, msg.swipes.length - 1));
               return {
                 ...msg,
@@ -611,6 +612,19 @@ export const useUniverseStore = create<UniverseState>()(
             },
           };
         });
+      },
+
+      getTurnSwipeInfo: (locationId, turnNumber) => {
+        const roomMessages = get().messagesByLocation[locationId] || [];
+        const aiTurnMessages = roomMessages.filter(
+          (m) => m.turn_number === turnNumber && m.sender_type !== 'user'
+        );
+        if (aiTurnMessages.length === 0) {
+          return { activeIndex: 0, totalSwipes: 1 };
+        }
+        const activeIndex = aiTurnMessages[0]?.active_swipe_index || 0;
+        const totalSwipes = Math.max(...aiTurnMessages.map((m) => m.swipes.length), 1);
+        return { activeIndex, totalSwipes };
       },
 
       editUniverseMessage: (locationId, messageId, newContent) => {
@@ -654,141 +668,165 @@ export const useUniverseStore = create<UniverseState>()(
         });
       },
 
-      rerollUniverseMessage: async (locationId, messageId) => {
+      rerollEntireTurn: async (locationId, turnNumber) => {
         const state = get();
         if (state.isStreaming) return;
 
         const roomMessages = state.messagesByLocation[locationId] || [];
-        const targetMsg = roomMessages.find((m) => m.id === messageId);
-        if (!targetMsg || targetMsg.sender_type === 'user') return;
+        const aiTurnMessages = roomMessages.filter(
+          (m) => m.turn_number === turnNumber && m.sender_type !== 'user'
+        );
+        if (aiTurnMessages.length === 0) return;
 
-        const prevSwipeIndex = targetMsg.active_swipe_index;
-        const newSwipeIndex = targetMsg.swipes.length;
-
-        // Abort any existing in-flight generation
+        // Abort any active in-flight stream
         if (activeUniverseAbortController) {
           activeUniverseAbortController.abort();
         }
         activeUniverseAbortController = new AbortController();
         const currentSignal = activeUniverseAbortController.signal;
 
-        // Optimistically append empty candidate swipe
+        // Capture previous indices for rollback if needed
+        const prevIndices: Record<string, number> = {};
+        const newIndices: Record<string, number> = {};
+
+        aiTurnMessages.forEach((m) => {
+          prevIndices[m.id] = m.active_swipe_index;
+          newIndices[m.id] = m.swipes.length;
+        });
+
+        // Optimistically append empty swipe candidates across all AI messages in this turn
         set((s) => {
           const msgs = s.messagesByLocation[locationId] || [];
-          const nextMsgs = msgs.map((m) =>
-            m.id === messageId
-              ? {
-                  ...m,
-                  swipes: [...m.swipes, ''],
-                  active_swipe_index: newSwipeIndex,
-                  content: '',
-                }
-              : m
-          );
+          const updated = msgs.map((m) => {
+            if (m.turn_number === turnNumber && m.sender_type !== 'user') {
+              const targetNewIndex = newIndices[m.id];
+              return {
+                ...m,
+                swipes: [...m.swipes, ''],
+                active_swipe_index: targetNewIndex,
+                content: '',
+              };
+            }
+            return m;
+          });
           return {
             isStreaming: true,
-            streamingStage: targetMsg.sender_type === 'narrator' ? 'narrator' : 'character',
+            streamingStage: 'narrator',
             streamingContent: '',
             messagesByLocation: {
               ...s.messagesByLocation,
-              [locationId]: nextMsgs,
+              [locationId]: updated,
             },
           };
         });
 
-        // Determine entity-specific generation candidates
-        let candidateProse: string;
-        if (targetMsg.sender_type === 'narrator') {
-          const room = state.locations.find((l) => l.id === locationId);
-          const variations = [
-            `*A sudden draft rustles through ${room?.name || 'the room'}, carrying the distant murmur of the surrounding world. Shadows lengthen across the floor as ambient light flickers gently.*`,
-            `*The atmosphere inside ${room?.name || 'the chamber'} settles into an expectant quiet. Outside, ambient currents pulse in steady rhythms, framing the occupants in contemplative silence.*`,
-            `*A crisp hum resonates through the boundaries of ${room?.name || 'this space'}. The environmental air purifiers cycle with a soft sigh, revealing subtle sensory details previously overlooked.*`,
-          ];
-          candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newSwipeIndex % variations.length];
-        } else {
-          // Character Dialogue Reroll
-          const charMember = state.members.find(
-            (m) => m.entity_id === targetMsg.sender_id || m.id === targetMsg.sender_id
-          );
-          const charName = charMember?.display_name || targetMsg.sender_name;
-          const variations = [
-            `*${charName} pauses for a thoughtful beat, tilting their head as they reconsider their words.* "Looking at it another way... maybe the path ahead isn't as perilous as we first thought. We just need to stay focused."`,
-            `*A subtle change of expression passes over ${charName}'s face before they speak with renewed clarity.* "There is something else I should mention. Keep your senses sharp, traveler. We aren't the only ones watching this room."`,
-            `*${charName} offers a reassuring nod, leaning slightly closer.* "No matter what unfolds next, we move together. What's your immediate call?"`,
-          ];
-          candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newSwipeIndex % variations.length];
-        }
-
         try {
-          // Stream word-by-word with room-partitioned targeting and abort checks
-          const words = candidateProse.split(' ');
-          for (let i = 0; i < words.length; i++) {
+          // Sequentially regenerate each message in the turn: Stage 1 (Narrator) -> Stage 2 (Companions)
+          for (const targetMsg of aiTurnMessages) {
             if (currentSignal.aborted) break;
 
-            const token = (i === 0 ? '' : ' ') + words[i];
-            set((s) => {
-              const msgs = s.messagesByLocation[locationId] || [];
-              const nextMsgs = msgs.map((m) => {
-                if (m.id === messageId) {
-                  const updatedSwipes = [...m.swipes];
-                  const currentText = updatedSwipes[newSwipeIndex] || '';
-                  const nextText = currentText + token;
-                  updatedSwipes[newSwipeIndex] = nextText;
-                  return {
-                    ...m,
-                    swipes: updatedSwipes,
-                    content: nextText,
-                  };
-                }
-                return m;
-              });
-              return {
-                messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
-                streamingContent: (s.streamingContent || '') + token,
-              };
-            });
+            const isNarrator = targetMsg.sender_type === 'narrator';
+            set({ streamingStage: isNarrator ? 'narrator' : 'character' });
 
-            // Realistic token pacing
-            await new Promise((resolve) => setTimeout(resolve, 35));
-          }
+            let candidateProse: string;
+            if (isNarrator) {
+              const room = state.locations.find((l) => l.id === locationId);
+              const variations = [
+                `*A heavy stillness blankets ${room?.name || 'the room'} before the subtle rhythm of the environment shifts. Shadows stretch across the floor, painting the chamber in quiet, atmospheric tones.*`,
+                `*The ambient hum of ${room?.name || 'the area'} ebbs into a momentary lull. Air purifiers pulse softly overhead, revealing the intimate cadence of breathing and quiet movement.*`,
+                `*A cool cross-breeze sweeps through ${room?.name || 'the surroundings'}, stirring suspended particles of dust and incense in the gentle lantern glow.*`,
+              ];
+              candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newIndices[targetMsg.id] % variations.length];
+            } else {
+              const charMember = state.members.find(
+                (m) => m.entity_id === targetMsg.sender_id || m.id === targetMsg.sender_id
+              );
+              const charName = charMember?.display_name || targetMsg.sender_name;
+              const variations = [
+                `*${charName} sets their attention squarely on you, eyes brightening with genuine curiosity.* "Every turn in this journey brings another mystery. Tell me, what's our next course of action?"`,
+                `*A quiet smile tugs at ${charName}'s lips as they observe the room.* "No need to overthink it. As long as we stay coordinated, there's nothing here we can't handle."`,
+                `*${charName} leans back slightly, exhaling a calm breath into the room.* "I trust your instinct on this one. Whenever you're ready, lead the way."`,
+              ];
+              candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newIndices[targetMsg.id] % variations.length];
+            }
 
-          if (currentSignal.aborted) {
-            // If aborted with empty tokens, rollback
-            const checkMsg = get().messagesByLocation[locationId]?.find((m) => m.id === messageId);
-            if (!checkMsg?.swipes[newSwipeIndex] || checkMsg.swipes[newSwipeIndex].trim() === '') {
+            // Stream word-by-word into targetMsg's new swipe candidate
+            const targetSwipeIndex = newIndices[targetMsg.id];
+            const words = candidateProse.split(' ');
+            for (let i = 0; i < words.length; i++) {
+              if (currentSignal.aborted) break;
+
+              const token = (i === 0 ? '' : ' ') + words[i];
               set((s) => {
                 const msgs = s.messagesByLocation[locationId] || [];
                 const nextMsgs = msgs.map((m) => {
-                  if (m.id === messageId) {
-                    const pruned = m.swipes.slice(0, newSwipeIndex);
+                  if (m.id === targetMsg.id) {
+                    const updatedSwipes = [...m.swipes];
+                    const currentText = updatedSwipes[targetSwipeIndex] || '';
+                    const nextText = currentText + token;
+                    updatedSwipes[targetSwipeIndex] = nextText;
                     return {
                       ...m,
-                      swipes: pruned,
-                      active_swipe_index: prevSwipeIndex,
-                      content: pruned[prevSwipeIndex] || m.content,
+                      swipes: updatedSwipes,
+                      content: nextText,
                     };
                   }
                   return m;
                 });
                 return {
                   messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
+                  streamingContent: (s.streamingContent || '') + token,
                 };
               });
+
+              await new Promise((resolve) => setTimeout(resolve, 30));
+            }
+
+            // Brief pause between characters in the turn
+            if (!currentSignal.aborted) {
+              await new Promise((resolve) => setTimeout(resolve, 150));
             }
           }
+
+          if (currentSignal.aborted) {
+            // Rollback any empty swipe candidates
+            set((s) => {
+              const msgs = s.messagesByLocation[locationId] || [];
+              const nextMsgs = msgs.map((m) => {
+                if (m.turn_number === turnNumber && m.sender_type !== 'user') {
+                  const targetIdx = newIndices[m.id];
+                  if (!m.swipes[targetIdx] || m.swipes[targetIdx].trim() === '') {
+                    const pruned = m.swipes.slice(0, targetIdx);
+                    const rollbackIdx = prevIndices[m.id] ?? 0;
+                    return {
+                      ...m,
+                      swipes: pruned,
+                      active_swipe_index: rollbackIdx,
+                      content: pruned[rollbackIdx] || m.content,
+                    };
+                  }
+                }
+                return m;
+              });
+              return {
+                messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
+              };
+            });
+          }
         } catch {
-          // On exception, rollback empty swipe candidate
+          // On exception, rollback all empty candidate swipes
           set((s) => {
             const msgs = s.messagesByLocation[locationId] || [];
             const nextMsgs = msgs.map((m) => {
-              if (m.id === messageId) {
-                const pruned = m.swipes.slice(0, newSwipeIndex);
+              if (m.turn_number === turnNumber && m.sender_type !== 'user') {
+                const targetIdx = newIndices[m.id];
+                const pruned = m.swipes.slice(0, targetIdx);
+                const rollbackIdx = prevIndices[m.id] ?? 0;
                 return {
                   ...m,
                   swipes: pruned,
-                  active_swipe_index: prevSwipeIndex,
-                  content: pruned[prevSwipeIndex] || m.content,
+                  active_swipe_index: rollbackIdx,
+                  content: pruned[rollbackIdx] || m.content,
                 };
               }
               return m;
