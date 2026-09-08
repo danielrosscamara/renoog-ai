@@ -17,7 +17,9 @@ import {
   Star,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
+import { useUniverseStore } from '../../stores/useUniverseStore';
 import type { Character } from '../../types';
+import type { WorldPreset } from '../../data/worldPresets';
 import { CharacterCardSkeleton } from '../common/Skeleton';
 import { CharacterDetailModal } from './CharacterDetailModal';
 import { WorldPairingDrawer } from '../universe/WorldPairingDrawer';
@@ -59,6 +61,7 @@ export const CharacterGallery: React.FC = () => {
     setEditingCharacter,
     setActiveView,
   } = useChatStore();
+  const createUniverseFromPairing = useUniverseStore((state) => state.createUniverseFromPairing);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -118,9 +121,14 @@ export const CharacterGallery: React.FC = () => {
     setPairingCharacter(character);
   };
 
-  const handlePairAndLaunchUniverse = (character: Character) => {
+  const handlePairAndLaunchUniverse = (
+    character: Character,
+    world: WorldPreset,
+    title: string
+  ) => {
     setPairingCharacter(null);
-    createNewChat(character.id);
+    createUniverseFromPairing(character, world, title);
+    setActiveView('universe');
   };
 
   const handleFileProcess = async (file: File) => {
