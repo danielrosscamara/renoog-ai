@@ -60,7 +60,15 @@ export interface Chat {
   updated_at: string;
 }
 
-export type ViewType = 'hub' | 'chat' | 'gallery' | 'personas' | 'settings' | 'studio' | 'character-studio';
+export type ViewType =
+  | 'hub'
+  | 'chat'
+  | 'gallery'
+  | 'personas'
+  | 'settings'
+  | 'studio'
+  | 'character-studio'
+  | 'universe';
 
 export * from './universe';
 
