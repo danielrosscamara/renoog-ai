@@ -2,21 +2,18 @@ import { useEffect } from 'react';
 import { useTheme } from './hooks/useTheme';
 import { useUIStore } from './stores/useUIStore';
 import { useChatStore } from './stores/useChatStore';
+import { useSettingsStore } from './components/settings/UseSettingsStore';
 
 /**
  * TEMPORARY test harness — not the real app UI.
  * Purpose: verify the wiring chain works end to end before building
- * the actual components on top of it:
- *   useTheme -> useUIStore -> (DOM class)
- *   useChatStore -> services/api.ts -> real backend at :8000
- *
- * Once confirmed, this gets replaced by the real layout
- * (Sidebar, RightSidebar, chat view, etc.)
+ * the actual components on top of it.
  */
 function App() {
   const { theme, toggleTheme } = useTheme();
   const { isSidebarOpen, toggleSidebar } = useUIStore();
   const { chats, isLoading, loadChats } = useChatStore();
+  const { selected_model, provider, updateSettings, getActiveModel } = useSettingsStore();
 
   useEffect(() => {
     loadChats();
@@ -39,6 +36,19 @@ function App() {
           className="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-default)] text-sm"
         >
           Toggle sidebar flag (currently: {isSidebarOpen ? 'open' : 'closed'})
+        </button>
+      </div>
+
+      <div className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border-default)] space-y-2">
+        <h2 className="font-semibold">Settings store (persists to localStorage)</h2>
+        <p className="text-sm">Provider: <strong>{provider}</strong></p>
+        <p className="text-sm">Selected model: <strong>{selected_model}</strong></p>
+        <p className="text-sm">Resolved active model: <strong>{getActiveModel()}</strong></p>
+        <button
+          onClick={() => updateSettings({ selected_model: 'meta-llama/llama-3.3-70b-instruct' })}
+          className="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-default)] text-sm"
+        >
+          Change model (then refresh page — should persist)
         </button>
       </div>
 
