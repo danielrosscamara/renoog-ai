@@ -9,6 +9,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { DevStudio } from './components/studio/DevStudio';
 import { CharacterStudio } from './components/studio/CharacterStudio';
 import { HomeHub } from './components/home/HomeHub';
+import { UniverseCockpit } from './components/universe/UniverseCockpit';
 import { PERSONA_PRESETS, DEFAULT_PERSONA_PRESET } from './data/personaPresets';
 import type { PersonaPreset } from './types/universe';
 import { PromptInspector } from './components/chat/PromptInspector';
@@ -846,7 +847,7 @@ export const App: React.FC = () => {
             onNavigate={(destination) => {
               if (destination === 'characters') setActiveView('gallery');
               else if (destination === 'worlds') setActiveView('gallery');
-              else if (destination === 'universes') setActiveView('chat');
+              else if (destination === 'universes') setActiveView('universe');
               else if (destination === 'favorites') setActiveView('gallery');
               else if (destination === 'settings') setActiveView('settings');
             }}
@@ -860,6 +861,11 @@ export const App: React.FC = () => {
             worldCount={4}
             universeCount={chats.length}
           />
+        )}
+
+        {/* VIEW H: Universe Simulation Cockpit */}
+        {activeView === 'universe' && (
+          <UniverseCockpit onBackToHub={() => setActiveView('hub')} />
         )}
       </main>
     </div>
