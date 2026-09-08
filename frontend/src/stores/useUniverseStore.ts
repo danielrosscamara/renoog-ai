@@ -12,6 +12,9 @@ import type { Character } from '../types';
 import type { WorldPreset } from '../data/worldPresets';
 import { DEFAULT_PERSONA_PRESET } from '../data/personaPresets';
 
+// In-flight universe stream controller to cancel hanging generations
+let activeUniverseAbortController: AbortController | null = null;
+
 /**
  * Pure helper to dynamically derive room occupancy counts directly from the
  * single source of truth (the members array).
@@ -64,11 +67,19 @@ export interface UniverseState {
   addUserMessage: (content: string) => void;
   addNarratorMessage: (content: string, locationId?: string) => void;
   addCharacterMessage: (characterId: string, content: string, locationId?: string) => void;
+
+  // Message Management & Multi-Swipe Reroll
+  setSwipeIndex: (locationId: string, messageId: string, newIndex: number) => void;
+  rerollUniverseMessage: (locationId: string, messageId: string) => Promise<void>;
+  editUniverseMessage: (locationId: string, messageId: string, newContent: string) => void;
+  deleteUniverseMessage: (locationId: string, messageId: string) => void;
+
   setStreaming: (
     isStreaming: boolean,
     stage?: 'idle' | 'narrator' | 'character',
     content?: string
   ) => void;
+  stopStreaming: () => void;
   resetUniverse: () => void;
 
   // Dynamic Room Selectors (Pure derivations from members)
@@ -565,6 +576,237 @@ export const useUniverseStore = create<UniverseState>()(
           streamingStage: stage,
           streamingContent: content,
         });
+      },
+
+      stopStreaming: () => {
+        if (activeUniverseAbortController) {
+          activeUniverseAbortController.abort();
+          activeUniverseAbortController = null;
+        }
+        set({
+          isStreaming: false,
+          streamingStage: 'idle',
+          streamingContent: '',
+        });
+      },
+
+      setSwipeIndex: (locationId, messageId, newIndex) => {
+        set((state) => {
+          const roomMessages = state.messagesByLocation[locationId] || [];
+          const updated = roomMessages.map((msg) => {
+            if (msg.id === messageId) {
+              const clampedIndex = Math.max(0, Math.min(newIndex, msg.swipes.length - 1));
+              return {
+                ...msg,
+                active_swipe_index: clampedIndex,
+                content: msg.swipes[clampedIndex] || msg.content,
+              };
+            }
+            return msg;
+          });
+          return {
+            messagesByLocation: {
+              ...state.messagesByLocation,
+              [locationId]: updated,
+            },
+          };
+        });
+      },
+
+      editUniverseMessage: (locationId, messageId, newContent) => {
+        set((state) => {
+          const roomMessages = state.messagesByLocation[locationId] || [];
+          const updated = roomMessages.map((msg) => {
+            if (msg.id === messageId) {
+              const updatedSwipes = [...msg.swipes];
+              if (updatedSwipes.length > 0) {
+                updatedSwipes[msg.active_swipe_index] = newContent.trim();
+              } else {
+                updatedSwipes.push(newContent.trim());
+              }
+              return {
+                ...msg,
+                content: newContent.trim(),
+                swipes: updatedSwipes,
+              };
+            }
+            return msg;
+          });
+          return {
+            messagesByLocation: {
+              ...state.messagesByLocation,
+              [locationId]: updated,
+            },
+          };
+        });
+      },
+
+      deleteUniverseMessage: (locationId, messageId) => {
+        set((state) => {
+          const roomMessages = state.messagesByLocation[locationId] || [];
+          const updated = roomMessages.filter((msg) => msg.id !== messageId);
+          return {
+            messagesByLocation: {
+              ...state.messagesByLocation,
+              [locationId]: updated,
+            },
+          };
+        });
+      },
+
+      rerollUniverseMessage: async (locationId, messageId) => {
+        const state = get();
+        if (state.isStreaming) return;
+
+        const roomMessages = state.messagesByLocation[locationId] || [];
+        const targetMsg = roomMessages.find((m) => m.id === messageId);
+        if (!targetMsg || targetMsg.sender_type === 'user') return;
+
+        const prevSwipeIndex = targetMsg.active_swipe_index;
+        const newSwipeIndex = targetMsg.swipes.length;
+
+        // Abort any existing in-flight generation
+        if (activeUniverseAbortController) {
+          activeUniverseAbortController.abort();
+        }
+        activeUniverseAbortController = new AbortController();
+        const currentSignal = activeUniverseAbortController.signal;
+
+        // Optimistically append empty candidate swipe
+        set((s) => {
+          const msgs = s.messagesByLocation[locationId] || [];
+          const nextMsgs = msgs.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  swipes: [...m.swipes, ''],
+                  active_swipe_index: newSwipeIndex,
+                  content: '',
+                }
+              : m
+          );
+          return {
+            isStreaming: true,
+            streamingStage: targetMsg.sender_type === 'narrator' ? 'narrator' : 'character',
+            streamingContent: '',
+            messagesByLocation: {
+              ...s.messagesByLocation,
+              [locationId]: nextMsgs,
+            },
+          };
+        });
+
+        // Determine entity-specific generation candidates
+        let candidateProse: string;
+        if (targetMsg.sender_type === 'narrator') {
+          const room = state.locations.find((l) => l.id === locationId);
+          const variations = [
+            `*A sudden draft rustles through ${room?.name || 'the room'}, carrying the distant murmur of the surrounding world. Shadows lengthen across the floor as ambient light flickers gently.*`,
+            `*The atmosphere inside ${room?.name || 'the chamber'} settles into an expectant quiet. Outside, ambient currents pulse in steady rhythms, framing the occupants in contemplative silence.*`,
+            `*A crisp hum resonates through the boundaries of ${room?.name || 'this space'}. The environmental air purifiers cycle with a soft sigh, revealing subtle sensory details previously overlooked.*`,
+          ];
+          candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newSwipeIndex % variations.length];
+        } else {
+          // Character Dialogue Reroll
+          const charMember = state.members.find(
+            (m) => m.entity_id === targetMsg.sender_id || m.id === targetMsg.sender_id
+          );
+          const charName = charMember?.display_name || targetMsg.sender_name;
+          const variations = [
+            `*${charName} pauses for a thoughtful beat, tilting their head as they reconsider their words.* "Looking at it another way... maybe the path ahead isn't as perilous as we first thought. We just need to stay focused."`,
+            `*A subtle change of expression passes over ${charName}'s face before they speak with renewed clarity.* "There is something else I should mention. Keep your senses sharp, traveler. We aren't the only ones watching this room."`,
+            `*${charName} offers a reassuring nod, leaning slightly closer.* "No matter what unfolds next, we move together. What's your immediate call?"`,
+          ];
+          candidateProse = variations.find((v) => !targetMsg.swipes.includes(v)) || variations[newSwipeIndex % variations.length];
+        }
+
+        try {
+          // Stream word-by-word with room-partitioned targeting and abort checks
+          const words = candidateProse.split(' ');
+          for (let i = 0; i < words.length; i++) {
+            if (currentSignal.aborted) break;
+
+            const token = (i === 0 ? '' : ' ') + words[i];
+            set((s) => {
+              const msgs = s.messagesByLocation[locationId] || [];
+              const nextMsgs = msgs.map((m) => {
+                if (m.id === messageId) {
+                  const updatedSwipes = [...m.swipes];
+                  const currentText = updatedSwipes[newSwipeIndex] || '';
+                  const nextText = currentText + token;
+                  updatedSwipes[newSwipeIndex] = nextText;
+                  return {
+                    ...m,
+                    swipes: updatedSwipes,
+                    content: nextText,
+                  };
+                }
+                return m;
+              });
+              return {
+                messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
+                streamingContent: (s.streamingContent || '') + token,
+              };
+            });
+
+            // Realistic token pacing
+            await new Promise((resolve) => setTimeout(resolve, 35));
+          }
+
+          if (currentSignal.aborted) {
+            // If aborted with empty tokens, rollback
+            const checkMsg = get().messagesByLocation[locationId]?.find((m) => m.id === messageId);
+            if (!checkMsg?.swipes[newSwipeIndex] || checkMsg.swipes[newSwipeIndex].trim() === '') {
+              set((s) => {
+                const msgs = s.messagesByLocation[locationId] || [];
+                const nextMsgs = msgs.map((m) => {
+                  if (m.id === messageId) {
+                    const pruned = m.swipes.slice(0, newSwipeIndex);
+                    return {
+                      ...m,
+                      swipes: pruned,
+                      active_swipe_index: prevSwipeIndex,
+                      content: pruned[prevSwipeIndex] || m.content,
+                    };
+                  }
+                  return m;
+                });
+                return {
+                  messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
+                };
+              });
+            }
+          }
+        } catch {
+          // On exception, rollback empty swipe candidate
+          set((s) => {
+            const msgs = s.messagesByLocation[locationId] || [];
+            const nextMsgs = msgs.map((m) => {
+              if (m.id === messageId) {
+                const pruned = m.swipes.slice(0, newSwipeIndex);
+                return {
+                  ...m,
+                  swipes: pruned,
+                  active_swipe_index: prevSwipeIndex,
+                  content: pruned[prevSwipeIndex] || m.content,
+                };
+              }
+              return m;
+            });
+            return {
+              messagesByLocation: { ...s.messagesByLocation, [locationId]: nextMsgs },
+            };
+          });
+        } finally {
+          if (activeUniverseAbortController?.signal === currentSignal) {
+            activeUniverseAbortController = null;
+          }
+          set({
+            isStreaming: false,
+            streamingStage: 'idle',
+            streamingContent: '',
+          });
+        }
       },
 
       resetUniverse: () => {
