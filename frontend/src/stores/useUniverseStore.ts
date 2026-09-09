@@ -32,6 +32,18 @@ const deriveLocationOccupancy = (
   }));
 };
 
+export interface SavedUniverseRecord {
+  universe: Universe;
+  locations: UniverseLocation[];
+  members: UniverseMember[];
+  messagesByLocation: Record<string, UniverseMessage[]>;
+  timelineEvents: TimelineEvent[];
+  turnCount: number;
+  physicalLocationId: string | null;
+  viewedLocationId: string | null;
+  lastActiveAt: string;
+}
+
 export interface UniverseState {
   // Active Simulation State
   activeUniverse: Universe | null;
@@ -43,6 +55,9 @@ export interface UniverseState {
   messagesByLocation: Record<string, UniverseMessage[]>;
   timelineEvents: TimelineEvent[];
   turnCount: number;
+
+  // Multi-Universe Persistence
+  savedUniverses: SavedUniverseRecord[];
 
   // Pending Travel Confirmation Modal State
   pendingTravel: {
@@ -60,11 +75,13 @@ export interface UniverseState {
 
   // Actions
   createUniverseFromPairing: (
-    character: Character,
+    characterOrCharacters: Character | Character[],
     world: WorldPreset,
     title: string,
     personaPreset?: PersonaPreset
   ) => Universe;
+  loadUniverse: (universeId: string) => void;
+  deleteUniverse: (universeId: string) => void;
   addCharacterToUniverse: (
     character: Character,
     targetLocationId?: string
@@ -120,6 +137,7 @@ export const useUniverseStore = create<UniverseState>()(
       viewedLocationId: null,
       pendingTravel: null,
       activeInputChannel: 'player',
+      savedUniverses: [],
       locations: [],
       members: [],
       messagesByLocation: {},
@@ -131,11 +149,15 @@ export const useUniverseStore = create<UniverseState>()(
       streamingContent: '',
 
       createUniverseFromPairing: (
-        character: Character,
+        characterOrCharacters: Character | Character[],
         world: WorldPreset,
         title: string,
         personaPreset?: PersonaPreset
       ): Universe => {
+        const characterList = Array.isArray(characterOrCharacters)
+          ? characterOrCharacters
+          : [characterOrCharacters];
+        const primaryChar = characterList[0];
         const universeId = `uni_${Date.now()}`;
         const activePersona = personaPreset || DEFAULT_PERSONA_PRESET;
         const now = new Date().toISOString();
@@ -152,7 +174,7 @@ export const useUniverseStore = create<UniverseState>()(
           occupant_count: 0, // Computed dynamically below
         }));
 
-        // 2. Instantiate the 3-Role Trinity members (Narrator, Initial Companion, User)
+        // 2. Instantiate the 3-Role Trinity members (Narrator, User, All Initial Companions)
         const seededMembers: UniverseMember[] = [
           {
             id: `mem_narrator_${universeId}`,
@@ -161,17 +183,6 @@ export const useUniverseStore = create<UniverseState>()(
             entity_id: 'narrator',
             display_name: 'Narrator',
             avatar_url: null,
-            current_location_id: spawnLocationId,
-            is_active: true,
-            joined_at: now,
-          },
-          {
-            id: `mem_char_${character.id}`,
-            universe_id: universeId,
-            entity_type: 'character',
-            entity_id: character.id,
-            display_name: character.name,
-            avatar_url: character.avatar_url,
             current_location_id: spawnLocationId,
             is_active: true,
             joined_at: now,
@@ -187,6 +198,17 @@ export const useUniverseStore = create<UniverseState>()(
             is_active: true,
             joined_at: now,
           },
+          ...characterList.map((char) => ({
+            id: `mem_char_${char.id}_${universeId}`,
+            universe_id: universeId,
+            entity_type: 'character' as const,
+            entity_id: char.id,
+            display_name: char.name,
+            avatar_url: char.avatar_url,
+            current_location_id: spawnLocationId,
+            is_active: true,
+            joined_at: now,
+          })),
         ];
 
         // 3. Dynamically compute room occupancy from initial members
@@ -214,27 +236,30 @@ export const useUniverseStore = create<UniverseState>()(
           },
         ];
 
-        // If companion has a first message / opening greeting, append as Turn 2
-        let initialTurnCount = 1;
-        if (character.first_mes) {
-          initialTurnCount = 2;
-          initialMessages.push({
-            id: `msg_char_first_${Date.now()}`,
-            universe_id: universeId,
-            location_id: spawnLocationId,
-            sender_type: 'character',
-            sender_id: character.id,
-            sender_name: character.name,
-            sender_avatar: character.avatar_url,
-            content: character.first_mes,
-            turn_number: 2,
-            active_swipe_index: 0,
-            swipes: [character.first_mes],
-            created_at: new Date(Date.now() + 100).toISOString(),
-          });
-        }
+        // If companions have first messages / opening greetings, append them as initial turns
+        let currentTurn = 1;
+        characterList.forEach((char, idx) => {
+          if (char.first_mes) {
+            currentTurn += 1;
+            initialMessages.push({
+              id: `msg_char_first_${char.id}_${Date.now() + idx * 50}`,
+              universe_id: universeId,
+              location_id: spawnLocationId,
+              sender_type: 'character',
+              sender_id: char.id,
+              sender_name: char.name,
+              sender_avatar: char.avatar_url,
+              content: char.first_mes,
+              turn_number: currentTurn,
+              active_swipe_index: 0,
+              swipes: [char.first_mes],
+              created_at: new Date(Date.now() + 100 + idx * 50).toISOString(),
+            });
+          }
+        });
 
         // 5. Seed the initial timeline events ledger
+        const companionNames = characterList.map((c) => c.name).join(', ');
         const initialTimelineEvents: TimelineEvent[] = [
           {
             id: `tl_genesis_${Date.now()}`,
@@ -242,17 +267,22 @@ export const useUniverseStore = create<UniverseState>()(
             location_id: spawnLocationId,
             location_name: spawnRoom.name,
             event_type: 'movement',
-            summary: `Arrived in ${spawnRoom.name} with ${character.name}`,
-            participant_names: [activePersona.name, character.name],
+            summary: `Arrived in ${spawnRoom.name} with ${companionNames}`,
+            participant_names: [activePersona.name, ...characterList.map((c) => c.name)],
             turn_number: 1,
             timestamp: now,
           },
         ];
 
         // 6. Build Universe Object
+        const defaultTitle =
+          characterList.length === 1
+            ? `${primaryChar.name} in ${world.name}`
+            : `${primaryChar.name} & Companions in ${world.name}`;
+
         const newUniverse: Universe = {
           id: universeId,
-          title: title.trim() || `${character.name} in ${world.name}`,
+          title: title.trim() || defaultTitle,
           world_id: world.id,
           world_name: world.name,
           config_preset: 'default',
@@ -261,6 +291,23 @@ export const useUniverseStore = create<UniverseState>()(
           created_at: now,
           updated_at: now,
         };
+
+        const newRecord: SavedUniverseRecord = {
+          universe: newUniverse,
+          locations: seededLocations,
+          members: seededMembers,
+          messagesByLocation: {
+            [spawnLocationId]: initialMessages,
+          },
+          timelineEvents: initialTimelineEvents,
+          turnCount: currentTurn,
+          physicalLocationId: spawnLocationId,
+          viewedLocationId: spawnLocationId,
+          lastActiveAt: now,
+        };
+
+        const existingSaved = get().savedUniverses || [];
+        const updatedSaved = [newRecord, ...existingSaved.filter((u) => u.universe.id !== universeId)];
 
         // Update state
         set({
@@ -276,13 +323,85 @@ export const useUniverseStore = create<UniverseState>()(
             [spawnLocationId]: initialMessages,
           },
           timelineEvents: initialTimelineEvents,
-          turnCount: initialTurnCount,
+          turnCount: currentTurn,
           isStreaming: false,
           streamingStage: 'idle',
           streamingContent: '',
+          savedUniverses: updatedSaved,
         });
 
         return newUniverse;
+      },
+
+      loadUniverse: (universeId: string) => {
+        const state = get();
+        const { savedUniverses, activeUniverse } = state;
+        const currentSaved = savedUniverses || [];
+
+        // If there is an active universe currently, sync its state to currentSaved
+        const syncedSaved = [...currentSaved];
+        if (activeUniverse) {
+          const activeIndex = syncedSaved.findIndex((rec) => rec.universe.id === activeUniverse.id);
+          const activeRecord: SavedUniverseRecord = {
+            universe: activeUniverse,
+            locations: state.locations,
+            members: state.members,
+            messagesByLocation: state.messagesByLocation,
+            timelineEvents: state.timelineEvents,
+            turnCount: state.turnCount,
+            physicalLocationId: state.physicalLocationId,
+            viewedLocationId: state.viewedLocationId,
+            lastActiveAt: new Date().toISOString(),
+          };
+          if (activeIndex >= 0) {
+            syncedSaved[activeIndex] = activeRecord;
+          } else {
+            syncedSaved.unshift(activeRecord);
+          }
+        }
+
+        const target = syncedSaved.find((rec) => rec.universe.id === universeId);
+        if (!target) return;
+
+        set({
+          activeUniverse: target.universe,
+          activeLocationId: target.viewedLocationId || target.physicalLocationId || target.locations[0]?.id || null,
+          physicalLocationId: target.physicalLocationId || target.locations[0]?.id || null,
+          viewedLocationId: target.viewedLocationId || target.physicalLocationId || target.locations[0]?.id || null,
+          locations: target.locations,
+          members: target.members,
+          messagesByLocation: target.messagesByLocation,
+          timelineEvents: target.timelineEvents,
+          turnCount: target.turnCount,
+          pendingTravel: null,
+          activeInputChannel: 'player',
+          isStreaming: false,
+          streamingStage: 'idle',
+          streamingContent: '',
+          savedUniverses: syncedSaved,
+        });
+      },
+
+      deleteUniverse: (universeId: string) => {
+        const { savedUniverses, activeUniverse } = get();
+        const updated = (savedUniverses || []).filter((u) => u.universe.id !== universeId);
+        if (activeUniverse && activeUniverse.id === universeId) {
+          set({
+            activeUniverse: null,
+            activeLocationId: null,
+            physicalLocationId: null,
+            viewedLocationId: null,
+            locations: [],
+            members: [],
+            messagesByLocation: {},
+            timelineEvents: [],
+            turnCount: 0,
+            pendingTravel: null,
+            savedUniverses: updated,
+          });
+        } else {
+          set({ savedUniverses: updated });
+        }
       },
 
       addCharacterToUniverse: (character, targetLocationId) => {
@@ -1167,6 +1286,7 @@ export const useUniverseStore = create<UniverseState>()(
         messagesByLocation: state.messagesByLocation,
         timelineEvents: state.timelineEvents,
         turnCount: state.turnCount,
+        savedUniverses: state.savedUniverses,
       }),
     }
   )
