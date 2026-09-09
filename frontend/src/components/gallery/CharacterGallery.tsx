@@ -124,10 +124,15 @@ export const CharacterGallery: React.FC = () => {
   const handlePairAndLaunchUniverse = (
     character: Character,
     world: WorldPreset,
-    title: string
+    title: string,
+    allCharacters?: Character[]
   ) => {
     setPairingCharacter(null);
-    createUniverseFromPairing(character, world, title);
+    createUniverseFromPairing(
+      allCharacters && allCharacters.length > 0 ? allCharacters : character,
+      world,
+      title
+    );
     setActiveView('universe');
   };
 
