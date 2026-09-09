@@ -10,11 +10,14 @@ import { DevStudio } from './components/studio/DevStudio';
 import { CharacterStudio } from './components/studio/CharacterStudio';
 import { HomeHub } from './components/home/HomeHub';
 import { UniverseCockpit } from './components/universe/UniverseCockpit';
+import { CreateUniversePage } from './components/universe/CreateUniversePage';
+import { ContinueUniversePage } from './components/universe/ContinueUniversePage';
 import { PERSONA_PRESETS, DEFAULT_PERSONA_PRESET } from './data/personaPresets';
 import type { PersonaPreset } from './types/universe';
 import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
+import { useUniverseStore } from './stores/useUniverseStore';
 import { api } from './services/api';
 import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe, Sparkles, Code2 } from 'lucide-react';
 
@@ -58,6 +61,7 @@ export const App: React.FC = () => {
     const storedId = localStorage.getItem('renoog_v2_active_persona_preset');
     return PERSONA_PRESETS.find((p) => p.id === storedId) || DEFAULT_PERSONA_PRESET;
   });
+  const savedUniverses = useUniverseStore((state) => state.savedUniverses) || [];
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
@@ -850,6 +854,8 @@ export const App: React.FC = () => {
               else if (destination === 'universes') setActiveView('universe');
               else if (destination === 'favorites') setActiveView('gallery');
               else if (destination === 'settings') setActiveView('settings');
+              else if (destination === 'create-universe') setActiveView('create-universe');
+              else if (destination === 'continue-universe') setActiveView('continue-universe');
             }}
             activePersona={activePersonaPreset}
             onSelectPersona={(preset) => {
@@ -859,13 +865,30 @@ export const App: React.FC = () => {
             userEmail="dale@renoog.ai"
             characterCount={characters.length}
             worldCount={4}
-            universeCount={chats.length}
+            universeCount={savedUniverses.length}
           />
         )}
 
         {/* VIEW H: Universe Simulation Cockpit */}
         {activeView === 'universe' && (
           <UniverseCockpit onBackToHub={() => setActiveView('hub')} />
+        )}
+
+        {/* VIEW I: Dedicated Create Universe Studio */}
+        {activeView === 'create-universe' && (
+          <CreateUniversePage
+            onBack={() => setActiveView('hub')}
+            onLaunch={() => setActiveView('universe')}
+          />
+        )}
+
+        {/* VIEW J: Dedicated Continue Universe Catalog */}
+        {activeView === 'continue-universe' && (
+          <ContinueUniversePage
+            onBack={() => setActiveView('hub')}
+            onResume={() => setActiveView('universe')}
+            onCreateNew={() => setActiveView('create-universe')}
+          />
         )}
       </main>
     </div>
