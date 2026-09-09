@@ -129,9 +129,6 @@ export const TravelConfirmationModal: React.FC<TravelConfirmationModalProps> = (
               <h2 id="travel-modal-title" className="text-sm font-bold text-white tracking-tight">
                 Confirm Room Travel
               </h2>
-              <p className="text-[11px] text-zinc-400">
-                Spatial relocation and scene transition
-              </p>
             </div>
           </div>
 
