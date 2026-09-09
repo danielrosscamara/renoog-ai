@@ -10,6 +10,8 @@ import {
   RefreshCw,
   ArrowLeft,
   Tv,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { UniverseMessage, UniverseMember } from '../../types/universe';
 import { useUniverseStore } from '../../stores/useUniverseStore';
@@ -56,6 +58,27 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
 
   // Feed scroll anchor ref
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Header Occupants popover state
+  const [isOccupantsPopoverOpen, setIsOccupantsPopoverOpen] = useState(false);
+  const occupantsPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        occupantsPopoverRef.current &&
+        !occupantsPopoverRef.current.contains(e.target as Node)
+      ) {
+        setIsOccupantsPopoverOpen(false);
+      }
+    };
+    if (isOccupantsPopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOccupantsPopoverOpen]);
 
   // Spatial location derivations
   const currentPhysicalId = physicalLocationId || activeLocationId || locations[0]?.id || '';
@@ -166,28 +189,103 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
 
         {/* Right: Room Occupants & Drawer Trigger */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Occupants Stack */}
-          <div className="hidden md:flex items-center gap-2 pl-3 pr-2 py-1 rounded-xl bg-[#181820] border border-white/5">
-            <span className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-zinc-500" />
-              {roomOccupants.length}
-            </span>
-            <div className="flex items-center -space-x-1.5">
-              {roomOccupants.slice(0, 4).map((member: UniverseMember) => (
-                <img
-                  key={member.id}
-                  src={
-                    member.avatar_url ||
-                    (member.entity_type === 'user'
-                      ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-                      : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')
-                  }
-                  alt={member.display_name}
-                  title={`${member.display_name}${member.entity_type === 'user' ? ' (You)' : ''}`}
-                  className="w-6 h-6 rounded-full object-cover ring-2 ring-[#181820]"
-                />
-              ))}
-            </div>
+          {/* Occupants Stack with Clickable Popover */}
+          <div className="relative" ref={occupantsPopoverRef}>
+            <button
+              type="button"
+              onClick={() => setIsOccupantsPopoverOpen(!isOccupantsPopoverOpen)}
+              className="hidden md:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-white/5 hover:border-white/10 transition-colors cursor-pointer group"
+              title="Click to view all occupants in this room"
+            >
+              <span className="text-[11px] text-zinc-400 group-hover:text-zinc-200 flex items-center gap-1.5 transition-colors">
+                <Users className="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400" />
+                <span>{roomOccupants.length}</span>
+                {isOccupantsPopoverOpen ? (
+                  <ChevronUp className="w-3 h-3 text-amber-400" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300" />
+                )}
+              </span>
+              <div className="flex items-center -space-x-1.5">
+                {roomOccupants.slice(0, 4).map((member: UniverseMember) => (
+                  <img
+                    key={member.id}
+                    src={
+                      member.avatar_url ||
+                      (member.entity_type === 'user'
+                        ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+                        : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')
+                    }
+                    alt={member.display_name}
+                    title={`${member.display_name}${member.entity_type === 'user' ? ' (You)' : ''}`}
+                    className="w-6 h-6 rounded-full object-cover ring-2 ring-[#181820]"
+                  />
+                ))}
+              </div>
+            </button>
+
+            {/* Room Occupants Dropdown Popover */}
+            {isOccupantsPopoverOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl bg-[#16161c] border border-white/10 shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5 mb-2">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-amber-400" />
+                    Room Occupants ({roomOccupants.length})
+                  </span>
+                  <span className="text-[10px] text-zinc-500 truncate max-w-30">
+                    {currentViewedRoom?.name}
+                  </span>
+                </div>
+
+                {roomOccupants.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic py-2 text-center">
+                    No characters currently in this room.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                    {roomOccupants.map((member: UniverseMember) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-[#1c1c24] border border-white/5"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={
+                              member.avatar_url ||
+                              (member.entity_type === 'user'
+                                ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+                                : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')
+                            }
+                            alt={member.display_name}
+                            className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-white block truncate">
+                              {member.display_name}
+                            </span>
+                            <span className="text-[10px] text-zinc-400 block truncate">
+                              {member.entity_type === 'user'
+                                ? 'Your Player Avatar'
+                                : 'Active Companion'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
+                            member.entity_type === 'user'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                          }`}
+                        >
+                          {member.entity_type === 'user' ? 'You' : 'Companion'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Rooms Drawer Trigger */}
@@ -209,10 +307,10 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
             <Radio className="w-4 h-4 text-indigo-400 animate-pulse shrink-0" />
             <div className="min-w-0">
               <span className="text-xs font-bold text-indigo-200 block truncate">
-                Remote Surveillance Feed: {currentViewedRoom?.name}
+                Spectating: {currentViewedRoom?.name}
               </span>
               <span className="text-[11px] text-indigo-400/80 block truncate">
-                Physical Location: {currentPhysicalRoom?.name || 'Another Room'} • You are observing via security intercom
+                Physical Location: {currentPhysicalRoom?.name || 'Another Room'}
               </span>
             </div>
           </div>
@@ -297,7 +395,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
                       isAdvancingScene ? 'animate-spin text-amber-400' : 'text-zinc-400'
                     }`}
                   />
-                  <span>Continue Scene (Zero-Turn Beat)</span>
+                  <span>Continue Scene</span>
                 </button>
 
                 <span className="text-[11px] text-zinc-500 text-center sm:text-right">
@@ -322,7 +420,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
                   disabled={!spectatorDirective.trim() || isStreaming}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black disabled:opacity-30 transition-colors shrink-0 cursor-pointer shadow-xs"
                 >
-                  Direct ➔
+                  Enter ➔
                 </button>
               </form>
             </div>
