@@ -5,9 +5,9 @@ import {
   MapPin,
   CheckCircle2,
   Circle,
-  Globe,
   Layers,
-  User,
+  Plus,
+  Search,
 } from 'lucide-react';
 import type { Character } from '../../types';
 import {
@@ -15,12 +15,18 @@ import {
   type WorldPreset,
   DEFAULT_WORLD_PRESET,
 } from '../../data/worldPresets';
+import { useChatStore } from '../../stores/useChatStore';
 
 export interface WorldPairingDrawerProps {
   character: Character | null;
   isOpen: boolean;
   onClose: () => void;
-  onPairAndLaunch: (character: Character, world: WorldPreset, title: string) => void;
+  onPairAndLaunch: (
+    primaryCharacter: Character,
+    world: WorldPreset,
+    title: string,
+    allCharacters?: Character[]
+  ) => void;
 }
 
 export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
@@ -29,24 +35,76 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
   onClose,
   onPairAndLaunch,
 }) => {
+  const characters = useChatStore((state) => state.characters);
   const [selectedWorldId, setSelectedWorldId] = useState<string>(DEFAULT_WORLD_PRESET.id);
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
   const [prevCharId, setPrevCharId] = useState<string | null>(null);
+
+  // Multi-character selection state
+  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>(
+    character ? [character] : []
+  );
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+
+  // Sync state during render when incoming character prop changes (per React recommended pattern)
+  if (character && character.id !== prevCharId) {
+    setPrevCharId(character.id);
+    setSelectedCharacters([character]);
+    setTitleOverride(null);
+    setIsPickerOpen(false);
+    setPickerSearch('');
+  } else if (!character && prevCharId !== null) {
+    setPrevCharId(null);
+    setSelectedCharacters([]);
+    setTitleOverride(null);
+    setIsPickerOpen(false);
+    setPickerSearch('');
+  }
 
   // Derive active world
   const selectedWorld =
     WORLD_PRESETS.find((w) => w.id === selectedWorldId) ?? DEFAULT_WORLD_PRESET;
 
-  // Reset title override when character prop changes
-  if (character && character.id !== prevCharId) {
-    setPrevCharId(character.id);
-    setTitleOverride(null);
-  }
+  // Derive default universe title based on all selected companions
+  const deriveDefaultTitle = () => {
+    if (selectedCharacters.length === 0) {
+      return `New Universe in ${selectedWorld.name}`;
+    }
+    if (selectedCharacters.length === 1) {
+      return `${selectedCharacters[0].name} in ${selectedWorld.name}`;
+    }
+    if (selectedCharacters.length === 2) {
+      return `${selectedCharacters[0].name} & ${selectedCharacters[1].name} in ${selectedWorld.name}`;
+    }
+    return `${selectedCharacters[0].name}, ${selectedCharacters[1].name} & ${selectedCharacters.length - 2} more in ${selectedWorld.name}`;
+  };
 
-  const defaultTitle = character
-    ? `${character.name} in ${selectedWorld.name}`
-    : `New Universe in ${selectedWorld.name}`;
+  const defaultTitle = deriveDefaultTitle();
   const displayTitle = titleOverride !== null ? titleOverride : defaultTitle;
+
+  // Filter available characters for the "+ Add Character" dropdown
+  const availableToAdd = characters.filter((c) => {
+    if (c.is_hidden) return false;
+    if (selectedCharacters.some((sc) => sc.id === c.id)) return false;
+    if (!pickerSearch.trim()) return true;
+    const q = pickerSearch.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.tagline.toLowerCase().includes(q) ||
+      c.tags.some((t) => t.toLowerCase().includes(q))
+    );
+  });
+
+  const handleAddCharacter = (charToAdd: Character) => {
+    setSelectedCharacters((prev) => [...prev, charToAdd]);
+    setTitleOverride(null); // Recalculate title dynamically
+  };
+
+  const handleRemoveCharacter = (charIdToRemove: string) => {
+    setSelectedCharacters((prev) => prev.filter((c) => c.id !== charIdToRemove));
+    setTitleOverride(null); // Recalculate title dynamically
+  };
 
   // Handle escape key and body scroll lock
   useEffect(() => {
@@ -67,12 +125,19 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen || !character) {
+  if (!isOpen) {
     return null;
   }
 
   const handleLaunchClick = () => {
-    onPairAndLaunch(character, selectedWorld, displayTitle.trim() || defaultTitle);
+    if (selectedCharacters.length === 0) return;
+    const primary = selectedCharacters[0];
+    onPairAndLaunch(
+      primary,
+      selectedWorld,
+      displayTitle.trim() || defaultTitle,
+      selectedCharacters
+    );
   };
 
   return (
@@ -90,14 +155,14 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
         <div className="p-6 border-b border-[#202026] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-              <Globe className="w-5 h-5" />
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-tight">
-                Pair with World Lorebook
+                Create Universe
               </h2>
               <p className="text-xs text-zinc-400">
-                Ground the Narrator and seed the initial physical rooms.
+                Choose your characters and world setting.
               </p>
             </div>
           </div>
@@ -114,36 +179,128 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
 
         {/* SCROLLABLE BODY */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* ACTIVE COMPANION PREVIEW CHIP */}
+          {/* CHARACTERS ADDED SECTION */}
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-2">
-              Companion Being Paired
-            </label>
-            <div className="p-3.5 rounded-2xl bg-[#16161c] border border-white/5 flex items-center gap-3.5">
-              <img
-                src={character.avatar_url}
-                alt={character.name}
-                className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-500/30 shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white truncate">
-                    {character.name}
-                  </h3>
-                  {character.tags[0] && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                      {character.tags[0]}
-                    </span>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                CHARACTERS ADDED ({selectedCharacters.length})
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen((prev) => !prev)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Character</span>
+              </button>
+            </div>
+
+            {/* CHARACTER PICKER DROPDOWN */}
+            {isPickerOpen && (
+              <div className="mb-3 p-3 rounded-2xl bg-[#181822] border border-indigo-500/30 shadow-xl space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">Select a Companion to Add</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsPickerOpen(false)}
+                    className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                    aria-label="Close picker"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Search available companions..."
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#121218] border border-white/10 text-xs text-white placeholder-zinc-500 outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                  {availableToAdd.length === 0 ? (
+                    <p className="text-xs text-zinc-500 text-center py-3">
+                      {characters.length === 0
+                        ? 'No companions found.'
+                        : 'All available companions have been added.'}
+                    </p>
+                  ) : (
+                    availableToAdd.map((c) => (
+                      <div
+                        key={c.id}
+                        onClick={() => handleAddCharacter(c)}
+                        className="p-2 rounded-xl bg-[#14141c] hover:bg-[#1f1f2e] border border-white/5 hover:border-indigo-500/30 flex items-center justify-between gap-2.5 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={c.avatar_url}
+                            alt={c.name}
+                            className="w-8 h-8 rounded-lg object-cover ring-1 ring-white/10 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{c.name}</h4>
+                            <p className="text-[10px] text-zinc-400 truncate">{c.tagline}</p>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                          + Add
+                        </span>
+                      </div>
+                    ))
                   )}
                 </div>
-                <p className="text-xs text-zinc-400 truncate mt-0.5">
-                  {character.tagline}
-                </p>
               </div>
-              <div className="flex items-center gap-1 text-[11px] text-zinc-400 bg-black/40 px-2.5 py-1 rounded-lg border border-white/5 shrink-0">
-                <User className="w-3 h-3 text-indigo-400" />
-                <span>1 / 1</span>
-              </div>
+            )}
+
+            {/* SELECTED CHARACTERS CARDS */}
+            <div className="space-y-2">
+              {selectedCharacters.length === 0 ? (
+                <div className="p-4 rounded-2xl bg-[#16161c] border border-dashed border-white/10 text-center">
+                  <p className="text-xs text-zinc-400">
+                    No companions added yet. Click <strong className="text-indigo-400">+ Add Character</strong> above.
+                  </p>
+                </div>
+              ) : (
+                selectedCharacters.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-3.5 rounded-2xl bg-[#16161c] border border-white/5 flex items-center gap-3.5 group hover:border-white/10 transition-colors"
+                  >
+                    <img
+                      src={c.avatar_url}
+                      alt={c.name}
+                      className="w-11 h-11 rounded-xl object-cover ring-2 ring-indigo-500/30 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-white truncate">{c.name}</h3>
+                        {c.tags[0] && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                            {c.tags[0]}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-400 truncate mt-0.5">{c.tagline}</p>
+                    </div>
+
+                    {selectedCharacters.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCharacter(c.id)}
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
+                        title={`Remove ${c.name}`}
+                        aria-label={`Remove ${c.name}`}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -253,7 +410,17 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-[#16161c] border border-[#262630] focus:border-indigo-500 text-xs text-white outline-none transition-colors"
             />
             <p className="text-[10px] text-zinc-400 mt-1.5">
-              Initializes 3 simulation members: <strong className="text-zinc-300">Narrator</strong>, <strong className="text-zinc-300">{character.name}</strong>, and <strong className="text-zinc-300">You</strong>.
+              Initializes {selectedCharacters.length + 2} simulation members:{' '}
+              <strong className="text-zinc-300">Narrator</strong>,{' '}
+              {selectedCharacters.length > 0 && (
+                <>
+                  <strong className="text-zinc-300">
+                    {selectedCharacters.map((c) => c.name).join(', ')}
+                  </strong>
+                  {', and '}
+                </>
+              )}
+              <strong className="text-zinc-300">You</strong>.
             </p>
           </div>
         </div>
@@ -262,8 +429,9 @@ export const WorldPairingDrawer: React.FC<WorldPairingDrawerProps> = ({
         <div className="p-5 border-t border-[#202026] bg-[#111114]/95 backdrop-blur-md shrink-0">
           <button
             type="button"
+            disabled={selectedCharacters.length === 0}
             onClick={handleLaunchClick}
-            className="w-full py-3.5 px-5 rounded-xl bg-linear-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+            className="w-full py-3.5 px-5 rounded-xl bg-linear-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Sparkles className="w-4 h-4 text-indigo-200" />
             <span>Initialize Universe & Begin Simulation</span>
