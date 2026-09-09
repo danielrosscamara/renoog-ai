@@ -68,7 +68,9 @@ export type ViewType =
   | 'settings'
   | 'studio'
   | 'character-studio'
-  | 'universe';
+  | 'universe'
+  | 'create-universe'
+  | 'continue-universe';
 
 export * from './universe';
 

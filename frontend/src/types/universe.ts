@@ -11,6 +11,8 @@ export type HomeDestination =
   | 'characters' 
   | 'worlds' 
   | 'universes' 
+  | 'create-universe' 
+  | 'continue-universe' 
   | 'favorites' 
   | 'settings';
 
