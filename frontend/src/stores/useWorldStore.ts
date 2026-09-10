@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { WORLD_PRESETS } from '../data/worldPresets';
-import type { WorldPreset, WorldLocationPreset } from '../data/worldPresets';
+import type {
+  WorldPreset,
+  WorldLocationPreset,
+  LorebookKeywordEntry,
+} from '../data/worldPresets';
 
 /**
  * Extended world interface carrying metadata for user-created custom worlds.
@@ -19,9 +23,24 @@ export interface CreateWorldInput {
   tagline: string;
   description: string;
   banner_url: string;
+  tags: string[];
+
+  // Narrative Directives & Atmosphere (Feeds Stage 1 Narrator)
+  narrator_tone?: string;
+  sensory_palette?: string;
+  weather_cycle?: string;
+  world_rules?: string;
+
+  // Societal Landscape & Factions
+  factions?: string;
+  cultural_taboos?: string;
+
+  // Spatial Topology & Starter Locations
   starter_locations: WorldLocationPreset[];
   default_location_id: string;
-  tags: string[];
+
+  // Selective Keyword Lorebook Entries
+  lorebook_entries?: LorebookKeywordEntry[];
 }
 
 export interface WorldState {
@@ -38,6 +57,10 @@ export interface WorldState {
   updateCustomWorld: (id: string, updates: Partial<CreateWorldInput>) => void;
   deleteCustomWorld: (id: string) => void;
   toggleFavoriteWorld: (worldId: string) => void;
+
+  // Portable JSON Import / Export
+  exportWorldJson: (id: string) => string;
+  importWorldJson: (jsonString: string) => WorldPresetWithMeta;
 }
 
 // Namespaced storage keys to avoid collisions with any existing or backend keys
@@ -120,11 +143,24 @@ export const useWorldStore = create<WorldState>((set, get) => {
       const now = new Date().toISOString();
       const worldId = generateUUID();
 
-      // Ensure every starter room has a valid UUID
+      // Deeply sanitize starter rooms & ambient NPCs
       const sanitizedLocations: WorldLocationPreset[] = input.starter_locations.map((loc) => ({
+        ...loc,
         id: loc.id && loc.id.trim().length > 0 ? loc.id : generateUUID(),
         name: loc.name.trim(),
         description: loc.description.trim(),
+        room_type: loc.room_type || 'hub',
+        threat_level: loc.threat_level || 'neutral',
+        ambient_sound: loc.ambient_sound?.trim() || undefined,
+        ambient_lighting: loc.ambient_lighting?.trim() || undefined,
+        connected_location_ids: loc.connected_location_ids || [],
+        ambient_npcs: loc.ambient_npcs?.map((npc) => ({
+          ...npc,
+          id: npc.id && npc.id.trim().length > 0 ? npc.id : generateUUID(),
+          name: npc.name.trim(),
+          role: npc.role.trim(),
+          description: npc.description.trim(),
+        })),
       }));
 
       // Ensure default_location_id references a valid location
@@ -134,11 +170,21 @@ export const useWorldStore = create<WorldState>((set, get) => {
         ? input.default_location_id
         : fallbackDefaultId;
 
+      // Deeply sanitize lorebook entries
+      const sanitizedLorebook: LorebookKeywordEntry[] = (input.lorebook_entries || []).map((entry) => ({
+        ...entry,
+        id: entry.id && entry.id.trim().length > 0 ? entry.id : generateUUID(),
+        keys: entry.keys.map((k) => k.trim()).filter(Boolean),
+        content: entry.content.trim(),
+        enabled: entry.enabled ?? true,
+      }));
+
       const newWorld: WorldPresetWithMeta = {
         ...input,
         id: worldId,
         starter_locations: sanitizedLocations,
         default_location_id: defaultLocId,
+        lorebook_entries: sanitizedLorebook,
         is_custom: true,
         created_at: now,
         updated_at: now,
@@ -155,9 +201,45 @@ export const useWorldStore = create<WorldState>((set, get) => {
       const now = new Date().toISOString();
       const updatedWorlds: WorldPresetWithMeta[] = get().worlds.map((w) => {
         if (w.id !== id || !w.is_custom) return w;
+
+        // If updating starter locations, sanitize them
+        const sanitizedLocations = updates.starter_locations
+          ? updates.starter_locations.map((loc) => ({
+              ...loc,
+              id: loc.id && loc.id.trim().length > 0 ? loc.id : generateUUID(),
+              name: loc.name.trim(),
+              description: loc.description.trim(),
+              room_type: loc.room_type || 'hub',
+              threat_level: loc.threat_level || 'neutral',
+              ambient_sound: loc.ambient_sound?.trim() || undefined,
+              ambient_lighting: loc.ambient_lighting?.trim() || undefined,
+              connected_location_ids: loc.connected_location_ids || [],
+              ambient_npcs: loc.ambient_npcs?.map((npc) => ({
+                ...npc,
+                id: npc.id && npc.id.trim().length > 0 ? npc.id : generateUUID(),
+                name: npc.name.trim(),
+                role: npc.role.trim(),
+                description: npc.description.trim(),
+              })),
+            }))
+          : w.starter_locations;
+
+        // If updating lorebook, sanitize them
+        const sanitizedLorebook = updates.lorebook_entries
+          ? updates.lorebook_entries.map((entry) => ({
+              ...entry,
+              id: entry.id && entry.id.trim().length > 0 ? entry.id : generateUUID(),
+              keys: entry.keys.map((k) => k.trim()).filter(Boolean),
+              content: entry.content.trim(),
+              enabled: entry.enabled ?? true,
+            }))
+          : w.lorebook_entries;
+
         return {
           ...w,
           ...updates,
+          starter_locations: sanitizedLocations,
+          lorebook_entries: sanitizedLorebook,
           updated_at: now,
         };
       });
@@ -184,6 +266,83 @@ export const useWorldStore = create<WorldState>((set, get) => {
 
       set({ favoriteWorldIds: nextFavorites });
       saveFavoriteWorldIdsToStorage(nextFavorites);
+    },
+
+    exportWorldJson: (id: string) => {
+      const world = get().getWorldById(id);
+      if (!world) {
+        throw new Error(`World with ID "${id}" was not found.`);
+      }
+      return JSON.stringify(world, null, 2);
+    },
+
+    importWorldJson: (jsonString: string) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(jsonString);
+      } catch (err) {
+        throw new Error(
+          `Invalid JSON syntax: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err }
+        );
+      }
+
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Imported world data must be a valid JSON object.');
+      }
+
+      const candidate = parsed as Record<string, unknown>;
+
+      if (typeof candidate.name !== 'string' || candidate.name.trim().length === 0) {
+        throw new Error('World JSON is missing a valid "name" string.');
+      }
+      if (typeof candidate.description !== 'string') {
+        throw new Error('World JSON is missing a valid "description" string.');
+      }
+
+      const input: CreateWorldInput = {
+        name: candidate.name.trim(),
+        genre: (typeof candidate.genre === 'string' ? candidate.genre : 'Fantasy') as WorldPreset['genre'],
+        tagline: typeof candidate.tagline === 'string' ? candidate.tagline.trim() : '',
+        description: candidate.description.trim(),
+        banner_url:
+          typeof candidate.banner_url === 'string' && candidate.banner_url.trim().length > 0
+            ? candidate.banner_url.trim()
+            : 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
+        tags: Array.isArray(candidate.tags)
+          ? candidate.tags.map((t) => String(t).trim()).filter(Boolean)
+          : ['Custom World'],
+
+        narrator_tone: typeof candidate.narrator_tone === 'string' ? candidate.narrator_tone.trim() : undefined,
+        sensory_palette: typeof candidate.sensory_palette === 'string' ? candidate.sensory_palette.trim() : undefined,
+        weather_cycle: typeof candidate.weather_cycle === 'string' ? candidate.weather_cycle.trim() : undefined,
+        world_rules: typeof candidate.world_rules === 'string' ? candidate.world_rules.trim() : undefined,
+
+        factions: typeof candidate.factions === 'string' ? candidate.factions.trim() : undefined,
+        cultural_taboos: typeof candidate.cultural_taboos === 'string' ? candidate.cultural_taboos.trim() : undefined,
+
+        starter_locations: Array.isArray(candidate.starter_locations)
+          ? (candidate.starter_locations as WorldLocationPreset[])
+          : [
+              {
+                id: generateUUID(),
+                name: 'Central Plaza',
+                room_type: 'hub',
+                threat_level: 'safe',
+                description: 'The starting hub location of this newly imported realm.',
+              },
+            ],
+        default_location_id:
+          typeof candidate.default_location_id === 'string'
+            ? candidate.default_location_id
+            : '',
+
+        lorebook_entries: Array.isArray(candidate.lorebook_entries)
+          ? (candidate.lorebook_entries as LorebookKeywordEntry[])
+          : [],
+      };
+
+      return get().createCustomWorld(input);
     },
   };
 });
