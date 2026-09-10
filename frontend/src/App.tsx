@@ -13,6 +13,7 @@ import { UniverseCockpit } from './components/universe/UniverseCockpit';
 import { CreateUniversePage } from './components/universe/CreateUniversePage';
 import { ContinueUniversePage } from './components/universe/ContinueUniversePage';
 import { WorldGallery } from './components/worlds/WorldGallery';
+import { WorldStudio } from './components/worlds/WorldStudio';
 import { WorldDetailModal } from './components/worlds/WorldDetailModal';
 import { ChooseCharacterSourceModal } from './components/worlds/ChooseCharacterSourceModal';
 import type { WorldPreset } from './data/worldPresets';
@@ -22,6 +23,7 @@ import { PromptInspector } from './components/chat/PromptInspector';
 import { ChatTurnSkeleton } from './components/common/Skeleton';
 import { useChatStore } from './stores/useChatStore';
 import { useUniverseStore } from './stores/useUniverseStore';
+import { useWorldStore } from './stores/useWorldStore';
 import { api } from './services/api';
 import { Brain, AlertCircle, X, ChevronDown, Check, Bot, RefreshCw, Zap, Search, HardDrive, Globe, Sparkles, Code2 } from 'lucide-react';
 
@@ -67,6 +69,9 @@ export const App: React.FC = () => {
   });
   const [inspectingWorld, setInspectingWorld] = useState<WorldPreset | null>(null);
   const [worldForRoleplay, setWorldForRoleplay] = useState<WorldPreset | null>(null);
+  const [editingWorldId, setEditingWorldId] = useState<string | null>(null);
+  const getWorldById = useWorldStore((state) => state.getWorldById);
+  const allWorlds = useWorldStore((state) => state.worlds);
   const creationDraft = useUniverseStore((state) => state.creationDraft);
   const setCreationDraft = useUniverseStore((state) => state.setCreationDraft);
   const savedUniverses = useUniverseStore((state) => state.savedUniverses) || [];
@@ -872,7 +877,7 @@ export const App: React.FC = () => {
             }}
             userEmail="dale@renoog.ai"
             characterCount={characters.length}
-            worldCount={4}
+            worldCount={allWorlds.length}
             universeCount={savedUniverses.length}
           />
         )}
@@ -912,6 +917,33 @@ export const App: React.FC = () => {
           <WorldGallery
             onBack={() => setActiveView('hub')}
             onSelectWorld={(world) => setInspectingWorld(world)}
+            onCreateWorld={() => {
+              setEditingWorldId(null);
+              setActiveView('world-studio');
+            }}
+            onEditWorld={(world) => {
+              setEditingWorldId(world.id);
+              setActiveView('world-studio');
+            }}
+          />
+        )}
+
+        {/* VIEW L: Dedicated World & Lorebook Studio */}
+        {activeView === 'world-studio' && (
+          <WorldStudio
+            worldId={editingWorldId ?? undefined}
+            onBack={() => {
+              setEditingWorldId(null);
+              setActiveView('worlds');
+            }}
+            onSaved={(savedWorldId) => {
+              setEditingWorldId(null);
+              setActiveView('worlds');
+              const savedWorld = getWorldById(savedWorldId);
+              if (savedWorld) {
+                setInspectingWorld(savedWorld);
+              }
+            }}
           />
         )}
       </main>
