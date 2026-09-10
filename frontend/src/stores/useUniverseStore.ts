@@ -44,7 +44,16 @@ export interface SavedUniverseRecord {
   lastActiveAt: string;
 }
 
+export interface UniverseCreationDraft {
+  initialCharacters?: Character[];
+  initialWorldId?: string;
+}
+
 export interface UniverseState {
+  // Pre-Creation Setup Draft
+  creationDraft: UniverseCreationDraft | null;
+  setCreationDraft: (draft: UniverseCreationDraft | null) => void;
+
   // Active Simulation State
   activeUniverse: Universe | null;
   activeLocationId: string | null; // Kept in sync with viewedLocationId for backwards compatibility
@@ -137,6 +146,8 @@ export const useUniverseStore = create<UniverseState>()(
       viewedLocationId: null,
       pendingTravel: null,
       activeInputChannel: 'player',
+      creationDraft: null,
+      setCreationDraft: (draft) => set({ creationDraft: draft }),
       savedUniverses: [],
       locations: [],
       members: [],
