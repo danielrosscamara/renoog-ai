@@ -3,54 +3,86 @@ import {
   ArrowLeft,
   Sparkles,
   Plus,
-  Search,
   X,
   MapPin,
   CheckCircle2,
   Circle,
   Layers,
   Users,
+  Compass,
 } from 'lucide-react';
 import type { Character } from '../../types';
-import {
-  WORLD_PRESETS,
-  DEFAULT_WORLD_PRESET,
-} from '../../data/worldPresets';
+import { DEFAULT_WORLD_PRESET } from '../../data/worldPresets';
 import { useChatStore } from '../../stores/useChatStore';
 import { useUniverseStore } from '../../stores/useUniverseStore';
+import { useWorldStore } from '../../stores/useWorldStore';
+import { ChooseCharacterSourceModal } from '../worlds/ChooseCharacterSourceModal';
+import { ChooseWorldSourceModal } from '../worlds/ChooseWorldSourceModal';
 
 export interface CreateUniversePageProps {
   onBack: () => void;
   onLaunch: () => void;
+  initialCharacters?: Character[];
+  initialWorldId?: string;
 }
 
 export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
   onBack,
   onLaunch,
+  initialCharacters,
+  initialWorldId,
 }) => {
   const characters = useChatStore((state) => state.characters);
+  const worlds = useWorldStore((state) => state.worlds);
   const createUniverseFromPairing = useUniverseStore(
     (state) => state.createUniverseFromPairing
   );
 
-  // Initial selection: first available character, if any
+  // Initial selection: initialCharacters prop or first non-hidden character
   const [selectedCharacters, setSelectedCharacters] = useState<Character[]>(() => {
+    if (initialCharacters && initialCharacters.length > 0) {
+      return initialCharacters;
+    }
     const first = characters.find((c) => !c.is_hidden);
     return first ? [first] : [];
   });
 
-  const [selectedWorldId, setSelectedWorldId] = useState<string>(
-    DEFAULT_WORLD_PRESET.id
-  );
+  const [selectedWorldId, setSelectedWorldId] = useState<string>(() => {
+    if (initialWorldId) {
+      return initialWorldId;
+    }
+    return DEFAULT_WORLD_PRESET.id;
+  });
+
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
 
-  // Companion picker dropdown state
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [pickerSearch, setPickerSearch] = useState('');
+  // Synchronous render-phase adjustment if initial props change (React standard pattern)
+  const [prevInitialChars, setPrevInitialChars] = useState(initialCharacters);
+  const [prevInitialWorldId, setPrevInitialWorldId] = useState(initialWorldId);
 
-  // Selected world object
+  if (initialCharacters !== prevInitialChars) {
+    setPrevInitialChars(initialCharacters);
+    if (initialCharacters && initialCharacters.length > 0) {
+      setSelectedCharacters(initialCharacters);
+      setTitleOverride(null);
+    }
+  }
+
+  if (initialWorldId !== prevInitialWorldId) {
+    setPrevInitialWorldId(initialWorldId);
+    if (initialWorldId) {
+      setSelectedWorldId(initialWorldId);
+      setTitleOverride(null);
+    }
+  }
+
+  // Modals state for adding characters & choosing worlds via Flowchart diamond
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const [isWorldModalOpen, setIsWorldModalOpen] = useState(false);
+
+  // Selected world object (checks useWorldStore first for custom worlds, fallback to default)
   const selectedWorld =
-    WORLD_PRESETS.find((w) => w.id === selectedWorldId) ?? DEFAULT_WORLD_PRESET;
+    worlds.find((w) => w.id === selectedWorldId) ?? worlds[0] ?? DEFAULT_WORLD_PRESET;
 
   // Auto-calculated default universe title
   const deriveDefaultTitle = () => {
@@ -71,22 +103,11 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
   const defaultTitle = deriveDefaultTitle();
   const displayTitle = titleOverride !== null ? titleOverride : defaultTitle;
 
-  // Filter available characters for "+ Add Character"
-  const availableToAdd = characters.filter((c) => {
-    if (c.is_hidden) return false;
-    if (selectedCharacters.some((sc) => sc.id === c.id)) return false;
-    if (!pickerSearch.trim()) return true;
-    const q = pickerSearch.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.tagline.toLowerCase().includes(q) ||
-      c.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  });
-
   const handleAddCharacter = (charToAdd: Character) => {
-    setSelectedCharacters((prev) => [...prev, charToAdd]);
-    setTitleOverride(null);
+    if (!selectedCharacters.some((c) => c.id === charToAdd.id)) {
+      setSelectedCharacters((prev) => [...prev, charToAdd]);
+      setTitleOverride(null);
+    }
   };
 
   const handleRemoveCharacter = (charIdToRemove: string) => {
@@ -142,92 +163,25 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-400" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                  Characters Added ({selectedCharacters.length})
+                  Characters in Party ({selectedCharacters.length})
                 </h2>
               </div>
               <button
                 type="button"
-                onClick={() => setIsPickerOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors cursor-pointer"
+                onClick={() => setIsCharacterModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors cursor-pointer shadow-sm hover:shadow-indigo-500/10"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Character</span>
               </button>
             </div>
 
-            {/* INLINE COMPANION PICKER DROPDOWN */}
-            {isPickerOpen && (
-              <div className="p-4 rounded-2xl bg-zinc-900/95 border border-indigo-500/30 shadow-xl space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">
-                    Select a Character to Add
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsPickerOpen(false)}
-                    className="p-1 text-zinc-400 hover:text-white cursor-pointer"
-                    aria-label="Close picker"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder="Search characters..."
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-indigo-500/50"
-                  />
-                </div>
-
-                <div className="max-h-56 overflow-y-auto space-y-2">
-                  {availableToAdd.length === 0 ? (
-                    <p className="text-xs text-zinc-500 text-center py-4">
-                      {characters.length === 0
-                        ? 'No characters found in gallery.'
-                        : 'All available characters have been added.'}
-                    </p>
-                  ) : (
-                    availableToAdd.map((c) => (
-                      <div
-                        key={c.id}
-                        onClick={() => handleAddCharacter(c)}
-                        className="p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-800/80 border border-zinc-800/60 hover:border-indigo-500/30 flex items-center justify-between gap-3 cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <img
-                            src={c.avatar_url}
-                            alt={c.name}
-                            className="w-9 h-9 rounded-xl object-cover ring-1 ring-zinc-700 shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <h3 className="text-xs font-bold text-white truncate">
-                              {c.name}
-                            </h3>
-                            <p className="text-[10px] text-zinc-400 truncate">
-                              {c.tagline}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                          + Add
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* SELECTED CHARACTERS LIST */}
             <div className="space-y-2.5">
               {selectedCharacters.length === 0 ? (
-                <div className="p-6 rounded-2xl bg-zinc-900/30 border border-dashed border-zinc-800 text-center space-y-1">
+                <div className="p-6 rounded-2xl bg-zinc-900/30 border border-dashed border-zinc-800 text-center space-y-2">
                   <p className="text-xs text-zinc-400">
-                    No characters added yet. Click{' '}
+                    No characters in your party yet. Click{' '}
                     <strong className="text-indigo-400">+ Add Character</strong>{' '}
                     above to choose your companions.
                   </p>
@@ -241,7 +195,7 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
                     <img
                       src={c.avatar_url}
                       alt={c.name}
-                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-500/30 shrink-0"
+                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-500/30 shrink-0 bg-zinc-800"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -259,17 +213,16 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
                       </p>
                     </div>
 
-                    {selectedCharacters.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCharacter(c.id)}
-                        className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
-                        title={`Remove ${c.name}`}
-                        aria-label={`Remove ${c.name}`}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Remove Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCharacter(c.id)}
+                      className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      aria-label={`Remove ${c.name}`}
+                      title="Remove character"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ))
               )}
@@ -282,13 +235,21 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-indigo-400" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                  Choose a World ({WORLD_PRESETS.length} Starter Worlds)
+                  World Lorebook Setting ({worlds.length} Available)
                 </h2>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsWorldModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
+              >
+                <Compass className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Browse / Favorites</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {WORLD_PRESETS.map((world) => {
+              {worlds.map((world) => {
                 const isSelected = world.id === selectedWorldId;
                 return (
                   <div
@@ -329,9 +290,16 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
 
                     {/* World Body Content */}
                     <div className="p-4 -mt-2 relative z-10 space-y-2">
-                      <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-                        {world.name}
-                      </h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
+                          {world.name}
+                        </h3>
+                        {world.is_custom && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                            Custom
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
                         {world.tagline}
                       </p>
@@ -350,7 +318,7 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
                               }`}
                             >
                               <MapPin className="w-2.5 h-2.5" />
-                              <span>{loc.name}</span>
+                              <span className="truncate max-w-28">{loc.name}</span>
                               {isSpawn && (
                                 <span className="text-[9px] text-indigo-400">
                                   (Spawn)
@@ -428,8 +396,8 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
               </span>
               <div className="flex items-center gap-2 text-zinc-300">
                 <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="font-semibold">{spawnLocation?.name}</span>
-                <span className="text-[10px] text-zinc-500">
+                <span className="font-semibold truncate">{spawnLocation?.name}</span>
+                <span className="text-[10px] text-zinc-500 truncate">
                   in {selectedWorld.name}
                 </span>
               </div>
@@ -453,6 +421,28 @@ export const CreateUniversePage: React.FC<CreateUniversePageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ADD CHARACTER MODAL (Flowchart Diamond: Browse Characters vs Favorites) */}
+      <ChooseCharacterSourceModal
+        world={selectedWorld}
+        isOpen={isCharacterModalOpen}
+        onClose={() => setIsCharacterModalOpen(false)}
+        onSelectCharacter={(char) => {
+          handleAddCharacter(char);
+        }}
+        excludeCharacterIds={selectedCharacters.map((c) => c.id)}
+        title="Add Character to Party"
+      />
+
+      {/* CHOOSE WORLD MODAL (Flowchart Diamond: Browse Worlds vs Favorites) */}
+      <ChooseWorldSourceModal
+        isOpen={isWorldModalOpen}
+        onClose={() => setIsWorldModalOpen(false)}
+        onSelectWorld={(world) => {
+          setSelectedWorldId(world.id);
+          setTitleOverride(null);
+        }}
+      />
     </div>
   );
 };

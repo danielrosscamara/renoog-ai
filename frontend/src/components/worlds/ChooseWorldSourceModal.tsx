@@ -11,14 +11,17 @@ import {
 import type { Character } from '../../types';
 import type { WorldPreset } from '../../data/worldPresets';
 import { WORLD_PRESETS } from '../../data/worldPresets';
+import { useWorldStore } from '../../stores/useWorldStore';
 
 export type WorldSourceMode = 'all' | 'favorites';
 
 export interface ChooseWorldSourceModalProps {
-  character: Character | null;
+  character?: Character | null;
   isOpen: boolean;
   onClose: () => void;
-  onSelectWorldAndLaunch: (character: Character, world: WorldPreset) => void;
+  onSelectWorld?: (world: WorldPreset, character?: Character | null) => void;
+  onSelectWorldAndLaunch?: (character: Character, world: WorldPreset) => void;
+  title?: string;
 }
 
 const FAVORITES_STORAGE_KEY = 'renoog_favorite_worlds';
@@ -27,20 +30,17 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
   character,
   isOpen,
   onClose,
+  onSelectWorld,
   onSelectWorldAndLaunch,
+  title,
 }) => {
+  const storeWorlds = useWorldStore((state) => state.worlds);
+  const storeFavIds = useWorldStore((state) => state.favoriteWorldIds);
+  const allWorlds = storeWorlds.length > 0 ? storeWorlds : WORLD_PRESETS;
+
   const [step, setStep] = useState<'decision' | 'picker'>('decision');
   const [sourceMode, setSourceMode] = useState<WorldSourceMode>('all');
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-
-  const [favoriteWorldIds, setFavoriteWorldIds] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      return stored ? (JSON.parse(stored) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
 
   // Synchronous render-phase state adjustment when modal transitions from closed to open
   if (isOpen !== prevIsOpen) {
@@ -48,12 +48,6 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
     if (isOpen) {
       setStep('decision');
       setSourceMode('all');
-      try {
-        const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
-        setFavoriteWorldIds(stored ? (JSON.parse(stored) as string[]) : []);
-      } catch {
-        setFavoriteWorldIds([]);
-      }
     }
   }
 
@@ -76,15 +70,34 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
     };
   }, [isOpen, onClose]);
 
+  const effectiveFavIds = useMemo(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      const legacyIds = stored ? (JSON.parse(stored) as string[]) : [];
+      return Array.from(new Set([...storeFavIds, ...legacyIds]));
+    } catch {
+      return storeFavIds;
+    }
+  }, [storeFavIds]);
+
   const favoriteWorlds = useMemo(() => {
-    return WORLD_PRESETS.filter((w) => favoriteWorldIds.includes(w.id));
-  }, [favoriteWorldIds]);
+    return allWorlds.filter((w) => effectiveFavIds.includes(w.id));
+  }, [allWorlds, effectiveFavIds]);
 
   const displayedWorlds = useMemo(() => {
-    return sourceMode === 'favorites' ? favoriteWorlds : WORLD_PRESETS;
-  }, [sourceMode, favoriteWorlds]);
+    return sourceMode === 'favorites' ? favoriteWorlds : allWorlds;
+  }, [sourceMode, favoriteWorlds, allWorlds]);
 
-  if (!isOpen || !character) {
+  const handleSelectWorld = (world: WorldPreset) => {
+    if (onSelectWorldAndLaunch && character) {
+      onSelectWorldAndLaunch(character, world);
+    } else if (onSelectWorld) {
+      onSelectWorld(world, character);
+      onClose();
+    }
+  };
+
+  if (!isOpen) {
     return null;
   }
 
@@ -124,11 +137,12 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>
-                  {step === 'decision'
-                    ? 'Choose a World Setting'
-                    : sourceMode === 'favorites'
-                    ? 'Favorite Worlds'
-                    : 'Browse Worlds'}
+                  {title ||
+                    (step === 'decision'
+                      ? 'Choose a World Setting'
+                      : sourceMode === 'favorites'
+                      ? 'Favorite Worlds'
+                      : 'Browse Worlds')}
                 </span>
                 {step === 'picker' && (
                   <span className="text-xs font-normal text-zinc-400">
@@ -136,12 +150,14 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
                   </span>
                 )}
               </h2>
-              <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
-                <span>Companion:</span>
-                <span className="font-medium text-indigo-300 truncate max-w-50">
-                  {character.name}
-                </span>
-              </div>
+              {character && (
+                <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
+                  <span>Companion:</span>
+                  <span className="font-medium text-indigo-300 truncate max-w-50">
+                    {character.name}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -237,7 +253,7 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
             ) : (
               <div className="space-y-3">
                 {displayedWorlds.map((world) => {
-                  const isFav = favoriteWorldIds.includes(world.id);
+                  const isFav = effectiveFavIds.includes(world.id);
                   const spawnLocation =
                     world.starter_locations.find((l) => l.id === world.default_location_id) ||
                     world.starter_locations[0];
@@ -278,14 +294,18 @@ export const ChooseWorldSourceModal: React.FC<ChooseWorldSourceModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Genesis Trigger Button */}
+                      {/* Genesis / Selection Trigger Button */}
                       <button
                         type="button"
-                        onClick={() => onSelectWorldAndLaunch(character, world)}
+                        onClick={() => handleSelectWorld(world)}
                         className="w-full sm:w-auto shrink-0 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer active:scale-[0.99]"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                        <span>Start Universe ➔</span>
+                        <span>
+                          {onSelectWorldAndLaunch && character
+                            ? 'Start Universe ➔'
+                            : 'Select World ➔'}
+                        </span>
                       </button>
                     </div>
                   );
