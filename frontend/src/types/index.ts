@@ -64,6 +64,7 @@ export type ViewType =
   | 'hub'
   | 'chat'
   | 'gallery'
+  | 'worlds'
   | 'personas'
   | 'settings'
   | 'studio'

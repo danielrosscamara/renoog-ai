@@ -12,6 +12,10 @@ import { HomeHub } from './components/home/HomeHub';
 import { UniverseCockpit } from './components/universe/UniverseCockpit';
 import { CreateUniversePage } from './components/universe/CreateUniversePage';
 import { ContinueUniversePage } from './components/universe/ContinueUniversePage';
+import { WorldGallery } from './components/worlds/WorldGallery';
+import { WorldDetailModal } from './components/worlds/WorldDetailModal';
+import { ChooseCharacterSourceModal } from './components/worlds/ChooseCharacterSourceModal';
+import type { WorldPreset } from './data/worldPresets';
 import { PERSONA_PRESETS, DEFAULT_PERSONA_PRESET } from './data/personaPresets';
 import type { PersonaPreset } from './types/universe';
 import { PromptInspector } from './components/chat/PromptInspector';
@@ -61,6 +65,9 @@ export const App: React.FC = () => {
     const storedId = localStorage.getItem('renoog_v2_active_persona_preset');
     return PERSONA_PRESETS.find((p) => p.id === storedId) || DEFAULT_PERSONA_PRESET;
   });
+  const [inspectingWorld, setInspectingWorld] = useState<WorldPreset | null>(null);
+  const [worldForRoleplay, setWorldForRoleplay] = useState<WorldPreset | null>(null);
+  const createUniverseFromPairing = useUniverseStore((state) => state.createUniverseFromPairing);
   const savedUniverses = useUniverseStore((state) => state.savedUniverses) || [];
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -850,7 +857,7 @@ export const App: React.FC = () => {
           <HomeHub
             onNavigate={(destination) => {
               if (destination === 'characters') setActiveView('gallery');
-              else if (destination === 'worlds') setActiveView('gallery');
+              else if (destination === 'worlds') setActiveView('worlds');
               else if (destination === 'universes') setActiveView('universe');
               else if (destination === 'favorites') setActiveView('gallery');
               else if (destination === 'settings') setActiveView('settings');
@@ -890,7 +897,42 @@ export const App: React.FC = () => {
             onCreateNew={() => setActiveView('create-universe')}
           />
         )}
+
+        {/* VIEW K: Dedicated Worlds & Lorebooks Gallery */}
+        {activeView === 'worlds' && (
+          <WorldGallery
+            onBack={() => setActiveView('hub')}
+            onSelectWorld={(world) => setInspectingWorld(world)}
+          />
+        )}
       </main>
+
+      {/* World Detail Modal for Lore, Physical Rooms & Launch */}
+      <WorldDetailModal
+        world={inspectingWorld}
+        isOpen={inspectingWorld !== null}
+        onClose={() => setInspectingWorld(null)}
+        onStartRoleplay={(world) => {
+          setInspectingWorld(null);
+          setWorldForRoleplay(world);
+        }}
+      />
+
+      {/* Choose Character Source Modal (Flowchart Diamond: Browse Characters vs Favorites) */}
+      <ChooseCharacterSourceModal
+        world={worldForRoleplay}
+        isOpen={worldForRoleplay !== null}
+        onClose={() => setWorldForRoleplay(null)}
+        onSelectCharacterAndLaunch={(character, world) => {
+          setWorldForRoleplay(null);
+          createUniverseFromPairing(
+            [character],
+            world,
+            `${character.name} in ${world.name}`
+          );
+          setActiveView('universe');
+        }}
+      />
     </div>
   );
 };
