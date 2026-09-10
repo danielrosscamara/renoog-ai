@@ -61,7 +61,7 @@ export const CharacterGallery: React.FC = () => {
     setEditingCharacter,
     setActiveView,
   } = useChatStore();
-  const createUniverseFromPairing = useUniverseStore((state) => state.createUniverseFromPairing);
+  const setCreationDraft = useUniverseStore((state) => state.setCreationDraft);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -126,12 +126,11 @@ export const CharacterGallery: React.FC = () => {
     world: WorldPreset
   ) => {
     setPairingCharacter(null);
-    createUniverseFromPairing(
-      [character],
-      world,
-      `${character.name} in ${world.name}`
-    );
-    setActiveView('universe');
+    setCreationDraft({
+      initialCharacters: [character],
+      initialWorldId: world.id,
+    });
+    setActiveView('create-universe');
   };
 
   const handleFileProcess = async (file: File) => {
