@@ -22,7 +22,7 @@ import type { Character } from '../../types';
 import type { WorldPreset } from '../../data/worldPresets';
 import { CharacterCardSkeleton } from '../common/Skeleton';
 import { CharacterDetailModal } from './CharacterDetailModal';
-import { WorldPairingDrawer } from '../universe/WorldPairingDrawer';
+import { ChooseWorldSourceModal } from '../worlds/ChooseWorldSourceModal';
 
 const GENRE_TAGS = [
   'All',
@@ -121,17 +121,15 @@ export const CharacterGallery: React.FC = () => {
     setPairingCharacter(character);
   };
 
-  const handlePairAndLaunchUniverse = (
+  const handleSelectWorldAndLaunch = (
     character: Character,
-    world: WorldPreset,
-    title: string,
-    allCharacters?: Character[]
+    world: WorldPreset
   ) => {
     setPairingCharacter(null);
     createUniverseFromPairing(
-      allCharacters && allCharacters.length > 0 ? allCharacters : character,
+      [character],
       world,
-      title
+      `${character.name} in ${world.name}`
     );
     setActiveView('universe');
   };
@@ -709,12 +707,12 @@ export const CharacterGallery: React.FC = () => {
         onExportPng={exportCharacterPng}
       />
 
-      {/* Slide-Over World Pairing Drawer for Pairing Character with a World Setting */}
-      <WorldPairingDrawer
+      {/* Two-Phase World Choice Modal (Flowchart Diamond) */}
+      <ChooseWorldSourceModal
         character={pairingCharacter}
         isOpen={pairingCharacter !== null}
         onClose={() => setPairingCharacter(null)}
-        onPairAndLaunch={handlePairAndLaunchUniverse}
+        onSelectWorldAndLaunch={handleSelectWorldAndLaunch}
       />
     </div>
   );
