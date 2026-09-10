@@ -119,8 +119,8 @@ export const CharacterStudio: React.FC = () => {
     exportCharacterPng,
   } = useChatStore();
 
-  const createUniverseFromPairing = useUniverseStore(
-    (state) => state.createUniverseFromPairing
+  const setCreationDraft = useUniverseStore(
+    (state) => state.setCreationDraft
   );
 
   // Post-Save Roleplay Modal States
@@ -366,12 +366,11 @@ export const CharacterStudio: React.FC = () => {
   ) => {
     setIsWorldChoiceModalOpen(false);
     setSavedCharacterForRoleplay(null);
-    createUniverseFromPairing(
-      [characterToLaunch],
-      world,
-      `${characterToLaunch.name} in ${world.name}`
-    );
-    setActiveView('universe');
+    setCreationDraft({
+      initialCharacters: [characterToLaunch],
+      initialWorldId: world.id,
+    });
+    setActiveView('create-universe');
   };
 
   // Export card
