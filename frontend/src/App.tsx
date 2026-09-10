@@ -67,7 +67,8 @@ export const App: React.FC = () => {
   });
   const [inspectingWorld, setInspectingWorld] = useState<WorldPreset | null>(null);
   const [worldForRoleplay, setWorldForRoleplay] = useState<WorldPreset | null>(null);
-  const createUniverseFromPairing = useUniverseStore((state) => state.createUniverseFromPairing);
+  const creationDraft = useUniverseStore((state) => state.creationDraft);
+  const setCreationDraft = useUniverseStore((state) => state.setCreationDraft);
   const savedUniverses = useUniverseStore((state) => state.savedUniverses) || [];
   const currentChat = chats.find((c) => c.id === activeChatId);
   const currentChar = characters.find((c) => c.id === currentChat?.character_id);
@@ -884,8 +885,16 @@ export const App: React.FC = () => {
         {/* VIEW I: Dedicated Create Universe Studio */}
         {activeView === 'create-universe' && (
           <CreateUniversePage
-            onBack={() => setActiveView('hub')}
-            onLaunch={() => setActiveView('universe')}
+            onBack={() => {
+              setCreationDraft(null);
+              setActiveView('hub');
+            }}
+            onLaunch={() => {
+              setCreationDraft(null);
+              setActiveView('universe');
+            }}
+            initialCharacters={creationDraft?.initialCharacters}
+            initialWorldId={creationDraft?.initialWorldId}
           />
         )}
 
@@ -923,14 +932,13 @@ export const App: React.FC = () => {
         world={worldForRoleplay}
         isOpen={worldForRoleplay !== null}
         onClose={() => setWorldForRoleplay(null)}
-        onSelectCharacterAndLaunch={(character, world) => {
+        onSelectCharacter={(character, world) => {
           setWorldForRoleplay(null);
-          createUniverseFromPairing(
-            [character],
-            world,
-            `${character.name} in ${world.name}`
-          );
-          setActiveView('universe');
+          setCreationDraft({
+            initialCharacters: [character],
+            initialWorldId: world?.id,
+          });
+          setActiveView('create-universe');
         }}
       />
     </div>
