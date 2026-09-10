@@ -15,7 +15,7 @@ export interface WorldPresetWithMeta extends WorldPreset {
 
 export interface CreateWorldInput {
   name: string;
-  genre: 'Cyberpunk' | 'Fantasy' | 'Sci-Fi' | 'Gothic Noir' | string;
+  genre: WorldPreset['genre'];
   tagline: string;
   description: string;
   banner_url: string;
@@ -153,7 +153,7 @@ export const useWorldStore = create<WorldState>((set, get) => {
 
     updateCustomWorld: (id: string, updates: Partial<CreateWorldInput>) => {
       const now = new Date().toISOString();
-      const updatedWorlds = get().worlds.map((w) => {
+      const updatedWorlds: WorldPresetWithMeta[] = get().worlds.map((w) => {
         if (w.id !== id || !w.is_custom) return w;
         return {
           ...w,
