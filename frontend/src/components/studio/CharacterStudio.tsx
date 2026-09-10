@@ -18,7 +18,11 @@ import {
   Wand2,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
+import { useUniverseStore } from '../../stores/useUniverseStore';
 import type { Character, PromptItem } from '../../types';
+import type { WorldPreset } from '../../data/worldPresets';
+import { PostSaveRoleplayModal } from './PostSaveRoleplayModal';
+import { ChooseWorldSourceModal } from '../worlds/ChooseWorldSourceModal';
 
 const AVAILABLE_GENRE_TAGS = [
   'Fantasy',
@@ -111,10 +115,18 @@ export const CharacterStudio: React.FC = () => {
     setEditingCharacter,
     createCharacter,
     updateCharacter,
-    createNewChat,
     setActiveView,
     exportCharacterPng,
   } = useChatStore();
+
+  const createUniverseFromPairing = useUniverseStore(
+    (state) => state.createUniverseFromPairing
+  );
+
+  // Post-Save Roleplay Modal States
+  const [savedCharacterForRoleplay, setSavedCharacterForRoleplay] = useState<Character | null>(null);
+  const [isPostSaveModalOpen, setIsPostSaveModalOpen] = useState(false);
+  const [isWorldChoiceModalOpen, setIsWorldChoiceModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wallpaperInputRef = useRef<HTMLInputElement>(null);
@@ -331,18 +343,35 @@ export const CharacterStudio: React.FC = () => {
     try {
       if (editingCharacter) {
         await updateCharacter(editingCharacter.id, characterPayload);
+        const updatedChar = { ...editingCharacter, ...characterPayload } as Character;
         setEditingCharacter(null);
-        await createNewChat(editingCharacter.id);
+        setSavedCharacterForRoleplay(updatedChar);
+        setIsPostSaveModalOpen(true);
       } else {
         const created = await createCharacter(characterPayload);
         setEditingCharacter(null);
-        await createNewChat(created.id);
+        setSavedCharacterForRoleplay(created);
+        setIsPostSaveModalOpen(true);
       }
     } catch {
       // Retain optimistic workflow
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSelectWorldAndLaunch = (
+    characterToLaunch: Character,
+    world: WorldPreset
+  ) => {
+    setIsWorldChoiceModalOpen(false);
+    setSavedCharacterForRoleplay(null);
+    createUniverseFromPairing(
+      [characterToLaunch],
+      world,
+      `${characterToLaunch.name} in ${world.name}`
+    );
+    setActiveView('universe');
   };
 
   // Export card
@@ -473,7 +502,7 @@ export const CharacterStudio: React.FC = () => {
             ) : (
               <Save className="w-3.5 h-3.5" />
             )}
-            <span>Save & Start Roleplay</span>
+            <span>Save Character</span>
           </button>
         </div>
       </header>
@@ -918,6 +947,34 @@ export const CharacterStudio: React.FC = () => {
           </div>
         </aside>
       </div>
+
+      {/* Post-Save Confirmation Modal (Flowchart Roleplay Diamond) */}
+      <PostSaveRoleplayModal
+        character={savedCharacterForRoleplay}
+        isOpen={isPostSaveModalOpen}
+        onClose={() => setIsPostSaveModalOpen(false)}
+        onReturnToGallery={() => {
+          setIsPostSaveModalOpen(false);
+          setSavedCharacterForRoleplay(null);
+          setActiveView('gallery');
+        }}
+        onStartRoleplay={() => {
+          setIsPostSaveModalOpen(false);
+          setIsWorldChoiceModalOpen(true);
+        }}
+      />
+
+      {/* World Selection Modal for Genesis */}
+      <ChooseWorldSourceModal
+        character={savedCharacterForRoleplay}
+        isOpen={isWorldChoiceModalOpen}
+        onClose={() => {
+          setIsWorldChoiceModalOpen(false);
+          setSavedCharacterForRoleplay(null);
+          setActiveView('gallery');
+        }}
+        onSelectWorldAndLaunch={handleSelectWorldAndLaunch}
+      />
     </div>
   );
 };
