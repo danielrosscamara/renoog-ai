@@ -17,6 +17,7 @@ import {
   User,
   LogOut,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import type { Chat } from '../../types';
@@ -288,6 +289,19 @@ export const Sidebar: React.FC = () => {
         >
           <Compass className="w-5 h-5 shrink-0 text-indigo-400" />
           {isSidebarOpen && <span>Discover</span>}
+        </button>
+
+        <button
+          onClick={() => setActiveView('favorites')}
+          className={`flex items-center gap-3 w-full p-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+            activeView === 'favorites'
+              ? 'bg-[#27272a] text-white'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+          }`}
+          title="Favorites"
+        >
+          <Star className="w-5 h-5 shrink-0 text-amber-400 fill-amber-400/20" />
+          {isSidebarOpen && <span>Favorites</span>}
         </button>
 
         <button
