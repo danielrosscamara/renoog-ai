@@ -72,7 +72,8 @@ export type ViewType =
   | 'world-studio'
   | 'universe'
   | 'create-universe'
-  | 'continue-universe';
+  | 'continue-universe'
+  | 'favorites';
 
 export * from './universe';
 
