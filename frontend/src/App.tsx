@@ -16,6 +16,9 @@ import { WorldGallery } from './components/worlds/WorldGallery';
 import { WorldStudio } from './components/worlds/WorldStudio';
 import { WorldDetailModal } from './components/worlds/WorldDetailModal';
 import { ChooseCharacterSourceModal } from './components/worlds/ChooseCharacterSourceModal';
+import { FavoritesPage } from './components/favorites/FavoritesPage';
+import { CharacterDetailModal } from './components/gallery/CharacterDetailModal';
+import type { Character } from './types';
 import type { WorldPreset } from './data/worldPresets';
 import { PERSONA_PRESETS, DEFAULT_PERSONA_PRESET } from './data/personaPresets';
 import type { PersonaPreset } from './types/universe';
@@ -53,6 +56,7 @@ export const App: React.FC = () => {
     isRightSidebarOpen,
     toggleRightSidebar,
     stopStreaming,
+    updateCharacter,
   } = useChatStore();
 
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -68,6 +72,7 @@ export const App: React.FC = () => {
     return PERSONA_PRESETS.find((p) => p.id === storedId) || DEFAULT_PERSONA_PRESET;
   });
   const [inspectingWorld, setInspectingWorld] = useState<WorldPreset | null>(null);
+  const [inspectingCharacter, setInspectingCharacter] = useState<Character | null>(null);
   const [worldForRoleplay, setWorldForRoleplay] = useState<WorldPreset | null>(null);
   const [editingWorldId, setEditingWorldId] = useState<string | null>(null);
   const getWorldById = useWorldStore((state) => state.getWorldById);
@@ -865,7 +870,7 @@ export const App: React.FC = () => {
               if (destination === 'characters') setActiveView('gallery');
               else if (destination === 'worlds') setActiveView('worlds');
               else if (destination === 'universes') setActiveView('universe');
-              else if (destination === 'favorites') setActiveView('gallery');
+              else if (destination === 'favorites') setActiveView('favorites');
               else if (destination === 'settings') setActiveView('settings');
               else if (destination === 'create-universe') setActiveView('create-universe');
               else if (destination === 'continue-universe') setActiveView('continue-universe');
@@ -946,6 +951,32 @@ export const App: React.FC = () => {
             }}
           />
         )}
+
+        {/* VIEW M: Dedicated Favorites Vault */}
+        {activeView === 'favorites' && (
+          <FavoritesPage
+            onBack={() => setActiveView('hub')}
+            onSelectCharacter={(char) => setInspectingCharacter(char)}
+            onStartRoleplayWithCharacter={(char) => {
+              setCreationDraft({
+                initialCharacters: [char],
+              });
+              setActiveView('create-universe');
+            }}
+            onSelectWorld={(world) => setInspectingWorld(world)}
+            onCreateUniverseWithWorld={(worldId) => {
+              setCreationDraft({
+                initialWorldId: worldId,
+              });
+              setActiveView('create-universe');
+            }}
+            onEditWorldInStudio={(worldId) => {
+              setEditingWorldId(worldId);
+              setActiveView('world-studio');
+            }}
+            onNavigate={(view) => setActiveView(view)}
+          />
+        )}
       </main>
 
       {/* World Detail Modal for Lore, Physical Rooms & Launch */}
@@ -971,6 +1002,30 @@ export const App: React.FC = () => {
             initialWorldId: world?.id,
           });
           setActiveView('create-universe');
+        }}
+      />
+
+      {/* Character Detail Slide-Over Modal for Favorites & App */}
+      <CharacterDetailModal
+        character={inspectingCharacter}
+        isOpen={inspectingCharacter !== null}
+        onClose={() => setInspectingCharacter(null)}
+        onStartRoleplay={(char) => {
+          setInspectingCharacter(null);
+          setCreationDraft({
+            initialCharacters: [char],
+          });
+          setActiveView('create-universe');
+        }}
+        onEditInStudio={() => {
+          setInspectingCharacter(null);
+          setActiveView('character-studio');
+        }}
+        onToggleFavorite={async (charId) => {
+          const target = characters.find((c) => c.id === charId);
+          if (target) {
+            await updateCharacter(charId, { is_favorite: !target.is_favorite });
+          }
         }}
       />
     </div>
