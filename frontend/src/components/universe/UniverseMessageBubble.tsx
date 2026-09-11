@@ -214,7 +214,7 @@ export const UniverseMessageBubble: React.FC<UniverseMessageBubbleProps> = ({
           <Compass className="w-5 h-5 animate-pulse-slow" />
         </div>
       ) : isCharacter ? (
-        <div className="relative shrink-0 mt-0.5">
+        <div className="shrink-0 mt-0.5">
           <img
             src={
               message.sender_avatar ||
@@ -223,7 +223,6 @@ export const UniverseMessageBubble: React.FC<UniverseMessageBubbleProps> = ({
             alt={message.sender_name}
             className="w-10 h-10 rounded-full object-cover ring-1 ring-violet-500/30 shadow-md"
           />
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-[#121214]" />
         </div>
       ) : (
         <div className="shrink-0 mt-0.5">
