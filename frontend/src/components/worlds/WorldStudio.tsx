@@ -22,6 +22,9 @@ import {
   CloudRain,
   Scale,
   X,
+  Search,
+  FolderPlus,
+  Layers,
 } from 'lucide-react';
 import { useWorldStore } from '../../stores/useWorldStore';
 import type { CreateWorldInput } from '../../stores/useWorldStore';
@@ -32,6 +35,15 @@ import type {
   AmbientNpc,
   WorldFaction,
 } from '../../data/worldPresets';
+import {
+  STANDARD_GENRES,
+  SUGGESTED_TAGS,
+  BUILTIN_ATMOSPHERIC_PRESETS,
+  loadCustomAtmosphericPresets,
+  saveCustomAtmosphericPresetsToStorage,
+} from '../../data/atmosphericPresets';
+import type { AtmosphericPreset } from '../../data/atmosphericPresets';
+import { LOREBOOK_STARTER_PACKS } from '../../data/lorebookStarterPacks';
 
 export interface WorldStudioProps {
   /** Optional world ID if editing an existing custom world; if omitted, creates a new one */
@@ -43,193 +55,6 @@ export interface WorldStudioProps {
 }
 
 type StudioTab = 'identity' | 'topology' | 'factions' | 'lorebook';
-
-const STANDARD_GENRES = [
-  'Cyberpunk',
-  'Fantasy',
-  'Sci-Fi',
-  'Gothic Noir',
-  'Post-Apocalyptic',
-  'Supernatural',
-  'Steampunk',
-  'Modern',
-] as const;
-
-const SUGGESTED_TAGS = [
-  'Cyberpunk',
-  'High Fantasy',
-  'Sci-Fi',
-  'Ancient Ruins',
-  'Space Exploration',
-  'Mystery',
-  'Underground',
-  'Survival',
-  'Dystopian',
-  'Magic',
-  'Noir',
-  'Industrial',
-  'Grimdark',
-  'Solarpunk',
-  'Space Opera',
-];
-
-export interface AtmosphericPreset {
-  id: string;
-  name: string;
-  genre: WorldPreset['genre'];
-  banner_url: string;
-  narrator_tone: string;
-  sensory_palette: string;
-  weather_cycle: string;
-  world_rules: string;
-  is_custom?: boolean;
-}
-
-const BUILTIN_ATMOSPHERIC_PRESETS: AtmosphericPreset[] = [
-  {
-    id: 'cyber_metropolis',
-    name: 'Cyber Metropolis',
-    genre: 'Cyberpunk',
-    banner_url: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1200&auto=format&fit=crop&q=80',
-    narrator_tone:
-      'Hardboiled cyberpunk noir with visceral sensory focus on mechanical grinding, chrome reflections, and cold industrial humidity. Cinematic and gritty.',
-    sensory_palette:
-      'Scent: Ozone, burning circuits, synthetic street noodles, wet asphalt. Audio: Muffled sub-bass from subterranean clubs, electromagnetic hum of neon, constant drizzle. Lighting: High-contrast electric violet and amber neon piercing dense grey smog.',
-    weather_cycle:
-      'Perpetual acid drizzle, dense chemical smog, occasional electromagnetic lightning storms.',
-    world_rules:
-      'Neural interfaces require local encryption to prevent ICE attacks. Corporate security enforcers have shoot-to-kill authorization in executive zones. Currency is exclusively crypto-credits.',
-  },
-  {
-    id: 'sunken_archive',
-    name: 'Sunken Archive',
-    genre: 'Fantasy',
-    banner_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
-    narrator_tone:
-      'Ethereal, scholarly high fantasy with an undercurrent of melancholic ancient mystery. Deliberate prose emphasizing forgotten lore and echoes.',
-    sensory_palette:
-      'Scent: Aged vellum, damp stone, faint incense of myrrh and lavender. Audio: Hollow drips into submerged cisterns, whisper of turned parchment. Lighting: Luminescent blue mana lichen glowing softly against mossy subterranean masonry.',
-    weather_cycle:
-      'Subterranean micro-climates; condensing subterranean mists that rise and fall with lunar tides.',
-    world_rules:
-      'Arcane relics must be stabilized before deciphering. Unspoken quiet must be kept within archive chambers lest slumbering ward-golems awaken.',
-  },
-  {
-    id: 'deep_space_station',
-    name: 'Deep Space Station',
-    genre: 'Sci-Fi',
-    banner_url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&auto=format&fit=crop&q=80',
-    narrator_tone:
-      'Hard science fiction with precise technical terminology, claustrophobic atmospheric tension, and vacuum awareness.',
-    sensory_palette:
-      'Scent: Recycled sterile oxygen, warm copper thermal paste, faint antiseptic. Audio: Rhythmic 60Hz life support hum, metallic creak of bulkheads under tidal gravitational stress. Lighting: Functional emergency orange and stark halogen corridors.',
-    weather_cycle:
-      'Artificial solar simulation cycle (24.8 hour standard cycle); periodic solar flare radiation warnings.',
-    world_rules:
-      'Airlock cycling protocols must be adhered to at all times. Weapon discharges risk bulkhead decompression and automatic vacuum quarantine.',
-  },
-  {
-    id: 'gothic_citadel',
-    name: 'Gothic Citadel',
-    genre: 'Gothic Noir',
-    banner_url: 'https://images.unsplash.com/photo-1514539079130-25950c84af65?w=1200&auto=format&fit=crop&q=80',
-    narrator_tone:
-      'Dark romanticism, dramatic shadows, Victorian dread, and psychological tension. Poetic and ominous.',
-    sensory_palette:
-      'Scent: Beeswax candles, damp graveyard earth, rusted wrought iron, cold rain on stone. Audio: Howling winds through gargoyle spires, solemn tolling of iron cathedral bells. Lighting: Flickering gas lamps casting elongated shadows against gothic cobblestones.',
-    weather_cycle:
-      'Persistent freezing rain, heavy low-hanging fog, rare crimson harvest moons.',
-    world_rules:
-      'Silver wards prevent nocturnal incursions. No mortal ventures beyond the sanctuary gates after midnight chimes.',
-  },
-  {
-    id: 'grimdark_wasteland',
-    name: 'Grimdark Wasteland',
-    genre: 'Post-Apocalyptic',
-    banner_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80',
-    narrator_tone:
-      'Brutal, visceral post-collapse survivalism. Sparse, sharp prose capturing harsh environmental hazards and desperate grit.',
-    sensory_palette:
-      'Scent: Scorched diesel, irradiated sand, sulfur, rotting rubber. Audio: Howling dust gales scouring scrap metal, distant turbine whines. Lighting: Blinding bleached sunlight reflecting off cracked salt flats.',
-    weather_cycle:
-      'Irradiated dust storms, toxic thermal winds, sudden boiling flash-rains.',
-    world_rules:
-      'Clean potable water is the only reliable barter currency. Respirators must be worn whenever traversing open alkali wastes.',
-  },
-];
-
-const CUSTOM_ATMOSPHERIC_PRESETS_KEY = 'renoog_custom_atmospheric_presets';
-
-function loadCustomAtmosphericPresets(): AtmosphericPreset[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_ATMOSPHERIC_PRESETS_KEY);
-    return raw ? (JSON.parse(raw) as AtmosphericPreset[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomAtmosphericPresetsToStorage(presets: AtmosphericPreset[]): void {
-  try {
-    localStorage.setItem(CUSTOM_ATMOSPHERIC_PRESETS_KEY, JSON.stringify(presets));
-  } catch (err) {
-    console.error('Failed to save custom atmospheric presets:', err);
-  }
-}
-
-const LOREBOOK_STARTER_PACKS = {
-  cyberpunk: [
-    {
-      keys: ['cyberdeck', 'neural link', 'ICE'],
-      content:
-        "A cyberdeck is a military-grade portable terminal connected directly to a netrunner's neural lace. Intrusion Countermeasure Electronics (ICE) protect mainframe nodes with lethal bio-feedback spikes.",
-    },
-    {
-      keys: ['chrome', 'cyberware', 'aug'],
-      content:
-        'Synthetic cybernetic enhancements replacing organic tissue. Heavy augmentation strains the human nervous system, requiring regular immunosuppressants and neuro-stabilizers.',
-    },
-    {
-      keys: ['megacorp', 'corporate', 'corpo'],
-      content:
-        'Extraterritorial conglomerates that supersede national governments. Corporate security forces enforce proprietary bylaws with absolute legal immunity.',
-    },
-  ],
-  fantasy: [
-    {
-      keys: ['mana', 'ley line', 'aether'],
-      content:
-        'The unseen primordial current flowing through the earth. Mages tap into resonant ley nexuses to weave spells, risking arcane corruption if channeled beyond physical tolerance.',
-    },
-    {
-      keys: ['ancient ruins', 'firstborn', 'precursor'],
-      content:
-        'Crumbling basalt megaliths dating to the First Age. The architecture defies modern geometry and houses dormant ward-golems that awaken upon unauthorized entry.',
-    },
-    {
-      keys: ['mithril', 'runesmith', 'enchantment'],
-      content:
-        'True silver forged in dwarven magma kilns. Mithril absorbs elemental magic without degrading, making it the only metal capable of binding permanent elemental runes.',
-    },
-  ],
-  scifi: [
-    {
-      keys: ['quantum drive', 'FTL', 'warp'],
-      content:
-        'Faster-than-light propulsion creating artificial sub-space bubbles. FTL transitions produce severe gravitational wakes and require precise navigational telemetry calculations.',
-    },
-    {
-      keys: ['synthetics', 'android', 'AI core'],
-      content:
-        'Autonomous sentient constructs governed by the Geneva Accord on Artificial Persons. Synthetics possess near-instantaneous heuristic processing.',
-    },
-    {
-      keys: ['terraforming', 'bio-dome', 'atmospheric scrubber'],
-      content:
-        'Planetary engineering complexes that generate breathable oxygen and regulate barometric pressure on hostile exoplanets.',
-    },
-  ],
-};
 
 function generateLocalId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -345,11 +170,23 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
     return locations[0]?.id ?? '';
   });
 
-  // Dimension 5: Keyword Lorebook
+  // Dimension 5: Keyword Lorebook & Category Organization
   const [lorebookEntries, setLorebookEntries] = useState<LorebookKeywordEntry[]>(
     () => existingWorld?.lorebook_entries ?? []
   );
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [lorebookSearchQuery, setLorebookSearchQuery] = useState<string>('');
+  const [showAddCategoryInput, setShowAddCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const lorebookFileInputRef = useRef<HTMLInputElement>(null);
+
+  // JSON Import Categorization Modal State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pendingImportEntries, setPendingImportEntries] = useState<LorebookKeywordEntry[]>([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [importMode, setImportMode] = useState<'merge' | 'new'>('merge');
+  const [selectedExistingCategory, setSelectedExistingCategory] = useState<string>('General');
+  const [newImportCategoryName, setNewImportCategoryName] = useState<string>('');
 
   // Status & Validation
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -362,6 +199,39 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
       locations.find((loc) => loc.id === selectedLocationId) ?? locations[0]
     );
   }, [locations, selectedLocationId]);
+
+  // Dynamic Existing Categories derived from Lorebook
+  const existingCategories = useMemo(() => {
+    const set = new Set<string>();
+    lorebookEntries.forEach((e) => {
+      const cat = e.category?.trim();
+      if (cat) {
+        set.add(cat);
+      }
+    });
+    if (set.size === 0) {
+      set.add('General');
+    }
+    return Array.from(set);
+  }, [lorebookEntries]);
+
+  // Filtered Lorebook Entries by Category and Search
+  const filteredLorebookEntries = useMemo(() => {
+    return lorebookEntries.filter((entry) => {
+      const entryCat = entry.category?.trim() || 'General';
+      const matchesCategory =
+        selectedCategory === 'All' || entryCat === selectedCategory;
+
+      if (!matchesCategory) return false;
+
+      if (!lorebookSearchQuery.trim()) return true;
+      const q = lorebookSearchQuery.toLowerCase();
+      const keysMatch = entry.keys.some((k) => k.toLowerCase().includes(q));
+      const contentMatch = entry.content.toLowerCase().includes(q);
+      const catMatch = entryCat.toLowerCase().includes(q);
+      return keysMatch || contentMatch || catMatch;
+    });
+  }, [lorebookEntries, selectedCategory, lorebookSearchQuery]);
 
   // Real-Time Estimated Token Weight
   const tokenEstimate = useMemo(() => {
@@ -384,7 +254,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
             l.ambient_npcs?.map((n) => `${n.name} ${n.role} ${n.description}`).join(' ') ?? ''
           }`
       ),
-      ...lorebookEntries.map((e) => `${e.keys.join(' ')} ${e.content}`),
+      ...lorebookEntries.map((e) => `${e.keys.join(' ')} ${e.content} ${e.category ?? ''}`),
     ].join(' ');
 
     return Math.ceil(textPool.trim().length / 3.8);
@@ -474,7 +344,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
       ambient_npcs: [],
     };
 
-    // If connecting to selectedLocationId, dynamically connect both ways
     let updatedLocations = [...locations, newRoom];
     if (selectedLocationId) {
       updatedLocations = updatedLocations.map((loc) =>
@@ -498,7 +367,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
     }
 
     const remaining = locations.filter((loc) => loc.id !== idToDelete);
-    // Clean up cross-references dynamically
     const cleaned = remaining.map((loc) => ({
       ...loc,
       connected_location_ids: loc.connected_location_ids?.filter(
@@ -507,7 +375,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
     }));
     setLocations(cleaned);
 
-    // Clean up faction territorial control references
     setFactionsList((prev) =>
       prev.map((f) => ({
         ...f,
@@ -622,7 +489,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
 
   const handleDeleteFaction = (factionId: string) => {
     setFactionsList((prev) => prev.filter((f) => f.id !== factionId));
-    // Clear controlling_faction_id on any rooms that had this faction
     setLocations((prev) =>
       prev.map((loc) =>
         loc.controlling_faction_id === factionId
@@ -638,7 +504,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
 
     const isControlled = (targetFaction.controlled_location_ids ?? []).includes(locationId);
 
-    // Update factions list
     setFactionsList((prev) =>
       prev.map((f) => {
         if (f.id === factionId) {
@@ -650,7 +515,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
               : [...current, locationId],
           };
         }
-        // If claiming, remove from any other faction
         if (!isControlled) {
           return {
             ...f,
@@ -663,7 +527,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
       })
     );
 
-    // Update location controlling faction
     setLocations((prev) =>
       prev.map((loc) =>
         loc.id === locationId
@@ -676,12 +539,16 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
     );
   };
 
-  // Keyword Lorebook Management (Fix for Item #7)
-  const handleAddLorebookEntry = (initial?: { keys: string[]; content: string }) => {
+  // Keyword Lorebook Management & Category Helpers
+  const handleAddLorebookEntry = (initial?: { keys: string[]; content: string; category?: string }) => {
+    const defaultCat =
+      initial?.category ?? (selectedCategory === 'All' ? 'General' : selectedCategory);
+
     const newEntry: LorebookKeywordEntry = {
       id: generateLocalId(),
       keys: initial?.keys ?? ['new keyword'],
       content: initial?.content ?? '',
+      category: defaultCat,
       enabled: true,
     };
     setLorebookEntries([...lorebookEntries, newEntry]);
@@ -693,6 +560,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
       id: generateLocalId(),
       keys: item.keys,
       content: item.content,
+      category: item.category,
       enabled: true,
     }));
     setLorebookEntries((prev) => [...prev, ...newEntries]);
@@ -713,12 +581,21 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
     setLorebookEntries((prev) => prev.filter((e) => e.id !== entryId));
   };
 
-  const handleImportLorebookJson = (file: File) => {
+  const handleCreateNewCategory = () => {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    setSelectedCategory(trimmed);
+    setShowAddCategoryInput(false);
+    setNewCategoryName('');
+  };
+
+  // Initial stage of JSON import: Parse file and open destination modal
+  const handleInitiateImportLorebookJson = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target?.result as string);
-        let importedList: Array<{ keys: string[] | string; content: string }> = [];
+        let importedList: Array<{ keys: string[] | string; content: string; category?: string }> = [];
 
         if (Array.isArray(parsed)) {
           importedList = parsed;
@@ -748,6 +625,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
             id: generateLocalId(),
             keys,
             content: item.content.trim(),
+            category: item.category?.trim() || undefined,
             enabled: true,
           });
         }
@@ -759,9 +637,14 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
           return;
         }
 
-        setLorebookEntries((prev) => [...prev, ...validEntries]);
-        setLorebookNotification(`Successfully imported ${validEntries.length} lore entries!`);
-        setTimeout(() => setLorebookNotification(null), 3500);
+        // Prepare modal data
+        const safeBaseName = file.name.replace(/\.json$/i, '').replace(/[_-]+/g, ' ');
+        setPendingImportEntries(validEntries);
+        setImportFileName(file.name);
+        setSelectedExistingCategory(existingCategories[0] || 'General');
+        setNewImportCategoryName(safeBaseName || 'Imported Lore');
+        setImportMode('merge');
+        setShowImportModal(true);
       } catch (err) {
         setValidationError(
           `Failed to parse Lorebook JSON: ${err instanceof Error ? err.message : String(err)}`
@@ -769,6 +652,28 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  // Final confirmation of JSON import with selected category
+  const handleConfirmImportWithCategory = () => {
+    const targetCategory =
+      importMode === 'merge'
+        ? selectedExistingCategory
+        : newImportCategoryName.trim() || 'Imported Lore';
+
+    const organizedEntries = pendingImportEntries.map((entry) => ({
+      ...entry,
+      category: targetCategory,
+    }));
+
+    setLorebookEntries((prev) => [...prev, ...organizedEntries]);
+    setSelectedCategory(targetCategory);
+    setShowImportModal(false);
+    setPendingImportEntries([]);
+    setLorebookNotification(
+      `Successfully imported ${organizedEntries.length} entries into category "${targetCategory}"!`
+    );
+    setTimeout(() => setLorebookNotification(null), 3500);
   };
 
   // Validation & Save Routine
@@ -801,7 +706,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
   const handleSaveWorld = () => {
     if (!validateForm()) return;
 
-    // Automatically synchronize factions summary string if structured factions exist
     const derivedFactionsSummary =
       factions.trim() ||
       factionsList
@@ -1076,7 +980,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                       />
                     </div>
 
-                    {/* Genre Selection with Custom Genre Support (Fix for Item #2) */}
+                    {/* Genre Selection with Custom Genre Support */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
                         <span>Primary Genre</span>
@@ -1130,7 +1034,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     </div>
                   </div>
 
-                  {/* Narrative Tagline (Cleaned label - Fix for Item #3) */}
+                  {/* Narrative Tagline */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-zinc-300">
                       Narrative Tagline
@@ -1231,7 +1135,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                   </div>
                 </div>
 
-                {/* Right Column: Banner Image & Atmospheric Presets (Fix for Item #1) */}
+                {/* Right Column: Banner Image & Atmospheric Presets */}
                 <div className="space-y-4 bg-[#14151e] p-5 rounded-2xl border border-white/5 flex flex-col">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xs font-bold uppercase tracking-wider text-violet-400 flex items-center gap-1.5">
@@ -1277,7 +1181,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     />
                   </div>
 
-                  {/* Curated Atmospheric Presets (Templates with Tone, Sensory, Weather) */}
+                  {/* Curated Atmospheric Presets */}
                   <div className="space-y-2 pt-2 border-t border-white/5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-300 font-bold flex items-center gap-1">
@@ -1566,7 +1470,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     </div>
                   </div>
 
-                  {/* Faction Territorial Control Link (Fix for Item #6) */}
+                  {/* Faction Territorial Control Link */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
@@ -1583,7 +1487,6 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                         const newFactionId = e.target.value || undefined;
                         handleUpdateActiveLocation({ controlling_faction_id: newFactionId });
 
-                        // Synchronize to factionsList
                         setFactionsList((prev) =>
                           prev.map((f) => {
                             const isTarget = f.id === newFactionId;
@@ -1673,7 +1576,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     </div>
                   </div>
 
-                  {/* Dynamic Bidirectional Doorways & Passages (Fix for Bug #5) */}
+                  {/* Dynamic Bidirectional Doorways & Passages */}
                   {locations.length > 1 && (
                     <div className="space-y-2 pt-2 border-t border-white/5">
                       <div className="flex items-center justify-between">
@@ -1724,7 +1627,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     </div>
                   )}
 
-                  {/* Ambient NPCs Sub-Editor (Fix for Bug #4: Empty Initializer) */}
+                  {/* Ambient NPCs Sub-Editor */}
                   <div className="space-y-3 pt-3 border-t border-white/5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
@@ -1828,7 +1731,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
             </div>
           )}
 
-          {/* TAB 3: SOCIETIES & FACTIONS (Fix for Item #6: Structured Synergy) */}
+          {/* TAB 3: SOCIETIES & FACTIONS */}
           {activeTab === 'factions' && (
             <div className="bg-[#14151e] p-6 rounded-2xl border border-white/5 space-y-6">
               <div className="flex items-center justify-between pb-3 border-b border-white/5">
@@ -1981,14 +1884,15 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
             </div>
           )}
 
-          {/* TAB 4: KEYWORD LOREBOOK (Fix for Item #7: Guide, Starter Packs, JSON Import) */}
+          {/* TAB 4: KEYWORD LOREBOOK & CATEGORY ORGANIZATION */}
           {activeTab === 'lorebook' && (
             <div className="bg-[#14151e] p-6 rounded-2xl border border-white/5 space-y-5">
+              {/* Header Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-white/5">
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-violet-400 flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5" />
-                    <span>Dynamic Keyword Lorebook ({lorebookEntries.length})</span>
+                    <span>Dynamic Keyword Lorebook ({lorebookEntries.length} Total)</span>
                   </h2>
                   <p className="text-xs text-zinc-400 mt-1">
                     Selective lore injected into the AI context only when specific keywords appear in dialogue.
@@ -2004,7 +1908,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        handleImportLorebookJson(file);
+                        handleInitiateImportLorebookJson(file);
                         e.target.value = '';
                       }
                     }}
@@ -2053,7 +1957,7 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
               </div>
 
               {/* 1-Click Starter Packs */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-white/5">
                 <span className="text-[11px] text-zinc-400 font-semibold">
                   1-Click Starter Packs:
                 </span>
@@ -2080,90 +1984,233 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                 </button>
               </div>
 
-              {/* Entries List */}
-              {lorebookEntries.length === 0 ? (
+              {/* Category Filter Pills & Search Bar */}
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Category Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-zinc-400 font-semibold flex items-center gap-1 mr-1">
+                      <Layers className="w-3.5 h-3.5 text-violet-400" />
+                      <span>Categories:</span>
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory('All')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        selectedCategory === 'All'
+                          ? 'bg-violet-600 text-white shadow-sm'
+                          : 'bg-[#1b1c26] text-zinc-400 hover:text-zinc-200 border border-white/5'
+                      }`}
+                    >
+                      All ({lorebookEntries.length})
+                    </button>
+
+                    {existingCategories.map((cat) => {
+                      const count = lorebookEntries.filter(
+                        (e) => (e.category?.trim() || 'General') === cat
+                      ).length;
+                      const isSelected = selectedCategory === cat;
+
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat)}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-violet-600 text-white shadow-sm'
+                              : 'bg-[#1b1c26] text-zinc-400 hover:text-zinc-200 border border-white/5'
+                          }`}
+                        >
+                          <span>{cat}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                              isSelected ? 'bg-white/20' : 'bg-white/5'
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {showAddCategoryInput ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="Category name..."
+                          className="px-2.5 py-1 rounded-lg bg-[#232432] border border-violet-500 text-xs text-white focus:outline-none"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCreateNewCategory();
+                            if (e.key === 'Escape') setShowAddCategoryInput(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCreateNewCategory}
+                          className="p-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddCategoryInput(false)}
+                          className="p-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategoryInput(true)}
+                        className="px-2.5 py-1 rounded-lg bg-[#1b1c26] hover:bg-[#252636] text-xs text-violet-400 font-semibold border border-dashed border-violet-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <FolderPlus className="w-3 h-3" />
+                        <span>New Category</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Real-time Search Input */}
+                  <div className="relative min-w-48 sm:w-64">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={lorebookSearchQuery}
+                      onChange={(e) => setLorebookSearchQuery(e.target.value)}
+                      placeholder="Filter by keyword or lore..."
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#1b1c26] border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+                    />
+                    {lorebookSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setLorebookSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtered Entries List */}
+              {filteredLorebookEntries.length === 0 ? (
                 <div className="py-12 text-center rounded-2xl border border-dashed border-white/10 space-y-3">
                   <BookOpen className="w-8 h-8 text-zinc-600 mx-auto" />
                   <p className="text-xs text-zinc-400">
-                    No selective lorebook entries added yet.
+                    {lorebookEntries.length === 0
+                      ? 'No selective lorebook entries added yet.'
+                      : 'No entries match your category or search filter.'}
                   </p>
                   <button
                     type="button"
                     onClick={() => handleAddLorebookEntry()}
                     className="text-xs font-semibold text-violet-400 hover:text-violet-300 underline cursor-pointer"
                   >
-                    Create the first keyword entry
+                    Create a new keyword entry
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {lorebookEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="p-4 rounded-xl bg-[#1b1c26] border border-white/5 space-y-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-1">
-                          <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={entry.enabled ?? true}
-                              onChange={(e) =>
-                                handleUpdateLorebookEntry(entry.id, {
-                                  enabled: e.target.checked,
-                                })
-                              }
-                              className="rounded border-zinc-700 bg-zinc-800 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                            />
-                            <span>Active</span>
-                          </label>
+                  {filteredLorebookEntries.map((entry) => {
+                    const currentCategory = entry.category?.trim() || 'General';
 
-                          <span className="text-zinc-600">|</span>
+                    return (
+                      <div
+                        key={entry.id}
+                        className="p-4 rounded-xl bg-[#1b1c26] border border-white/5 space-y-3 group hover:border-white/10 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 flex-1 flex-wrap">
+                            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={entry.enabled ?? true}
+                                onChange={(e) =>
+                                  handleUpdateLorebookEntry(entry.id, {
+                                    enabled: e.target.checked,
+                                  })
+                                }
+                                className="rounded border-zinc-700 bg-zinc-800 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                              />
+                              <span>Active</span>
+                            </label>
 
-                          {/* Comma-separated keyword input */}
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={entry.keys.join(', ')}
-                              onChange={(e) => {
-                                const splitKeys = e.target.value
-                                  .split(',')
-                                  .map((k) => k.trim())
-                                  .filter(Boolean);
-                                handleUpdateLorebookEntry(entry.id, {
-                                  keys: splitKeys,
-                                });
-                              }}
-                              placeholder="Trigger keys: cyberdeck, ICE, netrunner (comma-separated)"
-                              className="w-full px-3 py-1 rounded-lg bg-[#232432] border border-white/10 text-xs text-violet-300 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-                            />
+                            <span className="text-zinc-600">|</span>
+
+                            {/* Category Selector Badge on Card */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] text-zinc-400">Category:</span>
+                              <select
+                                value={currentCategory}
+                                onChange={(e) =>
+                                  handleUpdateLorebookEntry(entry.id, {
+                                    category: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 rounded-lg bg-[#232432] border border-white/10 text-xs text-violet-300 font-semibold focus:outline-none focus:border-violet-500 cursor-pointer"
+                              >
+                                {existingCategories.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <span className="text-zinc-600">|</span>
+
+                            {/* Comma-separated keyword input */}
+                            <div className="flex-1 min-w-48">
+                              <input
+                                type="text"
+                                value={entry.keys.join(', ')}
+                                onChange={(e) => {
+                                  const splitKeys = e.target.value
+                                    .split(',')
+                                    .map((k) => k.trim())
+                                    .filter(Boolean);
+                                  handleUpdateLorebookEntry(entry.id, {
+                                    keys: splitKeys,
+                                  });
+                                }}
+                                placeholder="Trigger keys: cyberdeck, ICE, netrunner (comma-separated)"
+                                className="w-full px-3 py-1 rounded-lg bg-[#232432] border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 font-medium"
+                              />
+                            </div>
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLorebookEntry(entry.id)}
+                            className="text-zinc-500 hover:text-rose-400 transition-colors p-1 cursor-pointer self-end sm:self-center"
+                            title="Delete entry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLorebookEntry(entry.id)}
-                          className="text-zinc-500 hover:text-rose-400 transition-colors p-1 cursor-pointer"
-                          title="Delete entry"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Lore Content */}
+                        <textarea
+                          rows={2}
+                          value={entry.content}
+                          onChange={(e) =>
+                            handleUpdateLorebookEntry(entry.id, {
+                              content: e.target.value,
+                            })
+                          }
+                          placeholder="Lore injected into the AI context when trigger keys appear in conversation..."
+                          className="w-full px-3.5 py-2 rounded-lg bg-[#232432] border border-white/5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500 leading-relaxed resize-y"
+                        />
                       </div>
-
-                      {/* Lore Content */}
-                      <textarea
-                        rows={2}
-                        value={entry.content}
-                        onChange={(e) =>
-                          handleUpdateLorebookEntry(entry.id, {
-                            content: e.target.value,
-                          })
-                        }
-                        placeholder="Lore injected into the AI context when trigger keys appear in conversation..."
-                        className="w-full px-3.5 py-2 rounded-lg bg-[#232432] border border-white/5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500 leading-relaxed resize-y"
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2222,6 +2269,123 @@ export const WorldStudio: React.FC<WorldStudioProps> = ({
                 className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 Save Preset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* JSON Import Categorization Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#14151e] border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-violet-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Import Lorebook Entries
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-xs text-violet-200">
+              Found <strong className="text-white">{pendingImportEntries.length}</strong> valid lore entries in{' '}
+              <code className="bg-black/30 px-1 py-0.5 rounded text-violet-300 font-mono">
+                {importFileName}
+              </code>
+            </div>
+
+            <div className="space-y-3">
+              <span className="text-xs font-semibold text-zinc-300 block">
+                How would you like to categorize these imported entries?
+              </span>
+
+              {/* Option 1: Merge into existing category */}
+              <label
+                className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  importMode === 'merge'
+                    ? 'bg-violet-600/15 border-violet-500/50 text-white'
+                    : 'bg-[#1b1c26] border-white/5 text-zinc-400 hover:border-white/15'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="importMode"
+                  checked={importMode === 'merge'}
+                  onChange={() => setImportMode('merge')}
+                  className="mt-0.5 text-violet-600 focus:ring-violet-500"
+                />
+                <div className="flex-1 space-y-1.5">
+                  <span className="text-xs font-bold block text-zinc-200">
+                    Merge into an Existing Category
+                  </span>
+                  <select
+                    value={selectedExistingCategory}
+                    disabled={importMode !== 'merge'}
+                    onChange={(e) => setSelectedExistingCategory(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg bg-[#232432] border border-white/10 text-xs text-white focus:outline-none focus:border-violet-500 disabled:opacity-40 cursor-pointer"
+                  >
+                    {existingCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              {/* Option 2: Create a new category */}
+              <label
+                className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  importMode === 'new'
+                    ? 'bg-violet-600/15 border-violet-500/50 text-white'
+                    : 'bg-[#1b1c26] border-white/5 text-zinc-400 hover:border-white/15'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="importMode"
+                  checked={importMode === 'new'}
+                  onChange={() => setImportMode('new')}
+                  className="mt-0.5 text-violet-600 focus:ring-violet-500"
+                />
+                <div className="flex-1 space-y-1.5">
+                  <span className="text-xs font-bold block text-zinc-200">
+                    Create a New Category for this Import
+                  </span>
+                  <input
+                    type="text"
+                    value={newImportCategoryName}
+                    disabled={importMode !== 'new'}
+                    onChange={(e) => setNewImportCategoryName(e.target.value)}
+                    placeholder="e.g., Cyberpunk Factions, Alien Biomes..."
+                    className="w-full px-3 py-1.5 rounded-lg bg-[#232432] border border-white/10 text-xs text-white focus:outline-none focus:border-violet-500 disabled:opacity-40"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="px-3 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImportWithCategory}
+                className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white transition-colors cursor-pointer shadow-md"
+              >
+                Confirm Import ({pendingImportEntries.length} Entries)
               </button>
             </div>
           </div>
