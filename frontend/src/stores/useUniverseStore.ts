@@ -87,7 +87,9 @@ export interface UniverseState {
     characterOrCharacters: Character | Character[],
     world: WorldPreset,
     title: string,
-    personaPreset?: PersonaPreset
+    personaPreset?: PersonaPreset,
+    characterLocationMap?: Record<string, string>,
+    userLocationId?: string
   ) => Universe;
   loadUniverse: (universeId: string) => void;
   deleteUniverse: (universeId: string) => void;
@@ -163,7 +165,9 @@ export const useUniverseStore = create<UniverseState>()(
         characterOrCharacters: Character | Character[],
         world: WorldPreset,
         title: string,
-        personaPreset?: PersonaPreset
+        personaPreset?: PersonaPreset,
+        characterLocationMap?: Record<string, string>,
+        userLocationId?: string
       ): Universe => {
         const characterList = Array.isArray(characterOrCharacters)
           ? characterOrCharacters
@@ -172,7 +176,8 @@ export const useUniverseStore = create<UniverseState>()(
         const universeId = `uni_${Date.now()}`;
         const activePersona = personaPreset || DEFAULT_PERSONA_PRESET;
         const now = new Date().toISOString();
-        const spawnLocationId = world.default_location_id;
+        const defaultSpawnLocationId = world.default_location_id || world.starter_locations[0]?.id || 'loc_hub';
+        const playerSpawnLocationId = userLocationId || defaultSpawnLocationId;
 
         // 1. Instantiate the physical rooms seeded by the World Lorebook
         const rawLocations: UniverseLocation[] = world.starter_locations.map((loc) => ({
@@ -194,7 +199,7 @@ export const useUniverseStore = create<UniverseState>()(
             entity_id: 'narrator',
             display_name: 'Narrator',
             avatar_url: null,
-            current_location_id: spawnLocationId,
+            current_location_id: playerSpawnLocationId,
             is_active: true,
             joined_at: now,
           },
@@ -205,57 +210,66 @@ export const useUniverseStore = create<UniverseState>()(
             entity_id: activePersona.id,
             display_name: activePersona.name,
             avatar_url: activePersona.avatar_url,
-            current_location_id: spawnLocationId,
+            current_location_id: playerSpawnLocationId,
             is_active: true,
             joined_at: now,
           },
-          ...characterList.map((char) => ({
-            id: `mem_char_${char.id}_${universeId}`,
-            universe_id: universeId,
-            entity_type: 'character' as const,
-            entity_id: char.id,
-            display_name: char.name,
-            avatar_url: char.avatar_url,
-            current_location_id: spawnLocationId,
-            is_active: true,
-            joined_at: now,
-          })),
+          ...characterList.map((char) => {
+            const assignedLocationId = characterLocationMap?.[char.id] || playerSpawnLocationId;
+            return {
+              id: `mem_char_${char.id}_${universeId}`,
+              universe_id: universeId,
+              entity_type: 'character' as const,
+              entity_id: char.id,
+              display_name: char.name,
+              avatar_url: char.avatar_url,
+              current_location_id: assignedLocationId,
+              is_active: true,
+              joined_at: now,
+            };
+          }),
         ];
 
         // 3. Dynamically compute room occupancy from initial members
         const seededLocations = deriveLocationOccupancy(rawLocations, seededMembers);
 
-        // 4. Formulate the opening ambient scene prose for the spawn room
+        // 4. Formulate opening ambient scene prose for the player's spawn room
         const spawnRoom =
-          world.starter_locations.find((l) => l.id === spawnLocationId) || world.starter_locations[0];
+          world.starter_locations.find((l) => l.id === playerSpawnLocationId) || world.starter_locations[0];
         const openingNarratorProse = `*${spawnRoom.description} Above, the ambiance of ${world.name} hangs heavy in the air.*`;
 
-        const initialMessages: UniverseMessage[] = [
-          {
-            id: `msg_narrator_intro_${Date.now()}`,
-            universe_id: universeId,
-            location_id: spawnLocationId,
-            sender_type: 'narrator',
-            sender_id: 'narrator',
-            sender_name: 'Narrator',
-            sender_avatar: null,
-            content: openingNarratorProse,
-            turn_number: 1,
-            active_swipe_index: 0,
-            swipes: [openingNarratorProse],
-            created_at: now,
-          },
-        ];
+        const messagesByLocation: Record<string, UniverseMessage[]> = {
+          [playerSpawnLocationId]: [
+            {
+              id: `msg_narrator_intro_${Date.now()}`,
+              universe_id: universeId,
+              location_id: playerSpawnLocationId,
+              sender_type: 'narrator',
+              sender_id: 'narrator',
+              sender_name: 'Narrator',
+              sender_avatar: null,
+              content: openingNarratorProse,
+              turn_number: 1,
+              active_swipe_index: 0,
+              swipes: [openingNarratorProse],
+              created_at: now,
+            },
+          ],
+        };
 
-        // If companions have first messages / opening greetings, append them as initial turns
+        // If companions have first messages / opening greetings, append them to their respective assigned rooms
         let currentTurn = 1;
         characterList.forEach((char, idx) => {
           if (char.first_mes) {
             currentTurn += 1;
-            initialMessages.push({
+            const charLocationId = characterLocationMap?.[char.id] || playerSpawnLocationId;
+            if (!messagesByLocation[charLocationId]) {
+              messagesByLocation[charLocationId] = [];
+            }
+            messagesByLocation[charLocationId].push({
               id: `msg_char_first_${char.id}_${Date.now() + idx * 50}`,
               universe_id: universeId,
-              location_id: spawnLocationId,
+              location_id: charLocationId,
               sender_type: 'character',
               sender_id: char.id,
               sender_name: char.name,
@@ -270,16 +284,22 @@ export const useUniverseStore = create<UniverseState>()(
         });
 
         // 5. Seed the initial timeline events ledger
-        const companionNames = characterList.map((c) => c.name).join(', ');
+        const coLocatedCompanions = characterList.filter(
+          (c) => (characterLocationMap?.[c.id] || playerSpawnLocationId) === playerSpawnLocationId
+        );
+        const companionSummary =
+          coLocatedCompanions.length > 0
+            ? ` with ${coLocatedCompanions.map((c) => c.name).join(', ')}`
+            : '';
         const initialTimelineEvents: TimelineEvent[] = [
           {
             id: `tl_genesis_${Date.now()}`,
             universe_id: universeId,
-            location_id: spawnLocationId,
+            location_id: playerSpawnLocationId,
             location_name: spawnRoom.name,
             event_type: 'movement',
-            summary: `Arrived in ${spawnRoom.name} with ${companionNames}`,
-            participant_names: [activePersona.name, ...characterList.map((c) => c.name)],
+            summary: `Arrived in ${spawnRoom.name}${companionSummary}`,
+            participant_names: [activePersona.name, ...coLocatedCompanions.map((c) => c.name)],
             turn_number: 1,
             timestamp: now,
           },
@@ -297,7 +317,7 @@ export const useUniverseStore = create<UniverseState>()(
           world_id: world.id,
           world_name: world.name,
           config_preset: 'default',
-          active_location_id: spawnLocationId,
+          active_location_id: playerSpawnLocationId,
           is_favorite: false,
           created_at: now,
           updated_at: now,
@@ -307,13 +327,11 @@ export const useUniverseStore = create<UniverseState>()(
           universe: newUniverse,
           locations: seededLocations,
           members: seededMembers,
-          messagesByLocation: {
-            [spawnLocationId]: initialMessages,
-          },
+          messagesByLocation,
           timelineEvents: initialTimelineEvents,
           turnCount: currentTurn,
-          physicalLocationId: spawnLocationId,
-          viewedLocationId: spawnLocationId,
+          physicalLocationId: playerSpawnLocationId,
+          viewedLocationId: playerSpawnLocationId,
           lastActiveAt: now,
         };
 
@@ -323,16 +341,14 @@ export const useUniverseStore = create<UniverseState>()(
         // Update state
         set({
           activeUniverse: newUniverse,
-          activeLocationId: spawnLocationId,
-          physicalLocationId: spawnLocationId,
-          viewedLocationId: spawnLocationId,
+          activeLocationId: playerSpawnLocationId,
+          physicalLocationId: playerSpawnLocationId,
+          viewedLocationId: playerSpawnLocationId,
           pendingTravel: null,
           activeInputChannel: 'player',
           locations: seededLocations,
           members: seededMembers,
-          messagesByLocation: {
-            [spawnLocationId]: initialMessages,
-          },
+          messagesByLocation,
           timelineEvents: initialTimelineEvents,
           turnCount: currentTurn,
           isStreaming: false,
