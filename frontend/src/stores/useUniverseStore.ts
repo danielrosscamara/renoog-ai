@@ -233,29 +233,32 @@ export const useUniverseStore = create<UniverseState>()(
         // 3. Dynamically compute room occupancy from initial members
         const seededLocations = deriveLocationOccupancy(rawLocations, seededMembers);
 
-        // 4. Formulate opening ambient scene prose for the player's spawn room
-        const spawnRoom =
-          world.starter_locations.find((l) => l.id === playerSpawnLocationId) || world.starter_locations[0];
-        const openingNarratorProse = `*${spawnRoom.description} Above, the ambiance of ${world.name} hangs heavy in the air.*`;
+        // 4. Formulate opening ambient scene prose for EVERY room in the universe
+        const messagesByLocation: Record<string, UniverseMessage[]> = {};
 
-        const messagesByLocation: Record<string, UniverseMessage[]> = {
-          [playerSpawnLocationId]: [
+        world.starter_locations.forEach((room, rIdx) => {
+          const isPlayerSpawn = room.id === playerSpawnLocationId;
+          const roomNarratorProse = isPlayerSpawn
+            ? `*${room.description} Above, the ambiance of ${world.name} hangs heavy in the air.*`
+            : `*${room.description} The presence of ${world.name} echoes across ${room.name}.*`;
+
+          messagesByLocation[room.id] = [
             {
-              id: `msg_narrator_intro_${Date.now()}`,
+              id: `msg_narrator_intro_${room.id}_${Date.now() + rIdx * 10}`,
               universe_id: universeId,
-              location_id: playerSpawnLocationId,
+              location_id: room.id,
               sender_type: 'narrator',
               sender_id: 'narrator',
               sender_name: 'Narrator',
               sender_avatar: null,
-              content: openingNarratorProse,
+              content: roomNarratorProse,
               turn_number: 1,
               active_swipe_index: 0,
-              swipes: [openingNarratorProse],
-              created_at: now,
+              swipes: [roomNarratorProse],
+              created_at: new Date(Date.now() + rIdx * 10).toISOString(),
             },
-          ],
-        };
+          ];
+        });
 
         // If companions have first messages / opening greetings, append them to their respective assigned rooms
         let currentTurn = 1;
@@ -267,7 +270,7 @@ export const useUniverseStore = create<UniverseState>()(
               messagesByLocation[charLocationId] = [];
             }
             messagesByLocation[charLocationId].push({
-              id: `msg_char_first_${char.id}_${Date.now() + idx * 50}`,
+              id: `msg_char_first_${char.id}_${Date.now() + 100 + idx * 50}`,
               universe_id: universeId,
               location_id: charLocationId,
               sender_type: 'character',
@@ -291,6 +294,9 @@ export const useUniverseStore = create<UniverseState>()(
           coLocatedCompanions.length > 0
             ? ` with ${coLocatedCompanions.map((c) => c.name).join(', ')}`
             : '';
+        const spawnRoom =
+          seededLocations.find((l) => l.id === playerSpawnLocationId) ||
+          seededLocations[0] || { name: 'the Realm' };
         const initialTimelineEvents: TimelineEvent[] = [
           {
             id: `tl_genesis_${Date.now()}`,
@@ -681,10 +687,39 @@ export const useUniverseStore = create<UniverseState>()(
 
       spectateLocation: (locationId) => {
         const state = get();
+        const existingMessages = state.messagesByLocation[locationId];
+        let updatedMessagesByLocation = state.messagesByLocation;
+
+        if (!existingMessages || existingMessages.length === 0) {
+          const roomObj = state.locations.find((l) => l.id === locationId);
+          if (roomObj) {
+            const ambientProse = `*Surveillance feed opens on ${roomObj.name}. ${roomObj.description}*`;
+            const narratorMsg: UniverseMessage = {
+              id: `msg_narrator_spectate_${locationId}_${Date.now()}`,
+              universe_id: state.activeUniverse?.id || 'uni_active',
+              location_id: locationId,
+              sender_type: 'narrator',
+              sender_id: 'narrator',
+              sender_name: 'Narrator',
+              sender_avatar: null,
+              content: ambientProse,
+              turn_number: state.turnCount,
+              active_swipe_index: 0,
+              swipes: [ambientProse],
+              created_at: new Date().toISOString(),
+            };
+            updatedMessagesByLocation = {
+              ...state.messagesByLocation,
+              [locationId]: [narratorMsg],
+            };
+          }
+        }
+
         set({
           viewedLocationId: locationId,
           activeLocationId: locationId,
           activeInputChannel: state.physicalLocationId === locationId ? 'player' : 'director',
+          messagesByLocation: updatedMessagesByLocation,
         });
       },
 
