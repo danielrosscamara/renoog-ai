@@ -858,7 +858,18 @@ export const App: React.FC = () => {
         {activeView === 'settings' && <SettingsView />}
 
         {/* VIEW E: Dev Studio (Admin & Moderation Console) */}
-        {activeView === 'studio' && <DevStudio />}
+        {activeView === 'studio' && (
+          <DevStudio
+            onEditWorldInStudio={(worldId) => {
+              setEditingWorldId(worldId);
+              setActiveView('world-studio');
+            }}
+            onCreateNewWorld={() => {
+              setEditingWorldId(null);
+              setActiveView('world-studio');
+            }}
+          />
+        )}
 
         {/* VIEW F: Renoog AI Prompt Manager & Character Studio */}
         {activeView === 'character-studio' && <CharacterStudio />}
