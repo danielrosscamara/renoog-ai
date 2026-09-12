@@ -2,7 +2,7 @@
 blueprint/
 docs/
 ideas/
-
+.agents
 # Node & Frontend
 node_modules/
 dist/
