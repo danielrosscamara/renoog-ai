@@ -12,14 +12,6 @@ import {
   Tv,
   ChevronDown,
   ChevronUp,
-  Bot,
-  Zap,
-  Code2,
-  Check,
-  Search,
-  X,
-  HardDrive,
-  Globe,
   Wand2,
 } from 'lucide-react';
 import type { UniverseMessage, UniverseMember } from '../../types/universe';
@@ -31,37 +23,19 @@ import { LocationDrawer } from './LocationDrawer';
 import { TravelConfirmationModal } from './TravelConfirmationModal';
 import { PersonaSelectorModal } from '../personas/PersonaSelectorModal';
 import { PromptInspector } from '../chat/PromptInspector';
-import { api } from '../../services/api';
+import { RightSidebar } from '../layout/RightSidebar';
 
 export interface UniverseCockpitProps {
   onBackToHub?: () => void;
 }
-
-interface QuickModelItem {
-  id: string;
-  name: string;
-  category: 'local' | 'cloud';
-  badge: string;
-  tagline: string;
-  isFree: boolean;
-}
-
-const CLOUD_MODELS: QuickModelItem[] = [
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', category: 'cloud', badge: 'Cloud', tagline: 'Anthropic · Supreme Prose', isFree: false },
-  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', category: 'cloud', badge: 'Cloud', tagline: 'Meta · High Immersion', isFree: false },
-  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', category: 'cloud', badge: 'Cloud', tagline: 'DeepSeek · Deep Reasoning', isFree: false },
-  { id: 'mistralai/mistral-large-2407', name: 'Mistral Large', category: 'cloud', badge: 'Cloud', tagline: 'Mistral · Creative Flow', isFree: false },
-  { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash', category: 'cloud', badge: 'Free', tagline: 'Google · 1M Context Free', isFree: true },
-  { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B', category: 'cloud', badge: 'Free', tagline: 'Meta · Fast Free Tier', isFree: true },
-];
 
 /**
  * UniverseCockpit
  *
  * Central simulation hub of Renoog AI V2.
  * Integrates the spatial room feed, remote surveillance feeds, zero-turn scene
- * continuation, dual-channel input console, active persona switcher, quick model
- * selector, context memory meter, and prompt inspector.
+ * continuation, dual-channel input console, active persona switcher, and modular
+ * expandable RightSidebar HUD.
  */
 export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub }) => {
   // Store selectors — Universe Simulation
@@ -92,6 +66,8 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
     addPersona,
     generateGhostwriterSuggestion,
     activeChatId,
+    isRightSidebarOpen,
+    toggleRightSidebar,
   } = useChatStore();
 
   // Local UI state
@@ -102,26 +78,16 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   const [isAdvancingScene, setIsAdvancingScene] = useState(false);
   const [isGhostwriting, setIsGhostwriting] = useState(false);
 
-  // Power Features UI state (Model Selector, Token Meter, Prompt Inspector)
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-  const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
+  // Inspector state
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<'layers' | 'raw'>('raw');
-  const [modelSearch, setModelSearch] = useState('');
-  const [modelTab, setModelTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
-  const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
-    const stored = localStorage.getItem('renoog_ollama_model');
-    return stored ? [stored] : [];
-  });
 
-  // Refs for dropdowns & scroll anchor
+  // Refs for occupants popover & scroll anchor
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const occupantsPopoverRef = useRef<HTMLDivElement | null>(null);
-  const modelDropdownRef = useRef<HTMLDivElement | null>(null);
-  const tokenDropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOccupantsPopoverOpen, setIsOccupantsPopoverOpen] = useState(false);
 
-  // Click-outside listener for popovers
+  // Click-outside listener for occupants popover
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -130,36 +96,12 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
       ) {
         setIsOccupantsPopoverOpen(false);
       }
-      if (
-        modelDropdownRef.current &&
-        !modelDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsModelDropdownOpen(false);
-      }
-      if (
-        tokenDropdownRef.current &&
-        !tokenDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsTokenDropdownOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  // Live auto-discovery of locally installed Ollama models
-  useEffect(() => {
-    if (isModelDropdownOpen) {
-      const ollamaUrl = localStorage.getItem('renoog_ollama_url') || 'http://localhost:11434';
-      api.testOllamaConnection(ollamaUrl).then((res) => {
-        if (res.ok && res.models) {
-          setInstalledOllamaModels(res.models);
-        }
-      });
-    }
-  }, [isModelDropdownOpen]);
 
   // Spatial location derivations
   const currentPhysicalId = physicalLocationId || activeLocationId || locations[0]?.id || '';
@@ -206,17 +148,11 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
     }));
   };
 
-  // Active Model & Provider Resolution
-  const activeProvider = (localStorage.getItem('renoog_llm_provider') || 'openrouter') as
-    | 'openrouter'
-    | 'ollama'
-    | 'custom';
+  // Active Model & Provider for status display in bottom bar
+  const activeProvider = localStorage.getItem('renoog_llm_provider') || 'openrouter';
   const ollamaModel = localStorage.getItem('renoog_ollama_model') || 'llama3.2:3b';
-  const customModel = localStorage.getItem('renoog_custom_endpoint_url')
-    ? 'custom-model'
-    : 'local-model';
-  const openRouterModel =
-    localStorage.getItem('renoog_model') || 'anthropic/claude-3.5-sonnet';
+  const openRouterModel = localStorage.getItem('renoog_model') || 'anthropic/claude-3.5-sonnet';
+  const customModel = localStorage.getItem('renoog_custom_endpoint_url') ? 'custom-model' : 'local-model';
 
   const activeModel =
     activeProvider === 'ollama'
@@ -227,91 +163,10 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
 
   const displayModelName =
     activeProvider === 'ollama'
-      ? `🦙 ${ollamaModel}`
+      ? `🦙 ${ollamaModel.replace(':latest', '')}`
       : activeProvider === 'custom'
       ? `⚡ ${customModel}`
       : (activeModel.split('/')[1] || activeModel);
-
-  const getModelMaxTokens = (modelSlug: string): number => {
-    const s = modelSlug.toLowerCase();
-    if (s.includes('gemini-2') || s.includes('gemini-1.5')) return 1000000;
-    if (s.includes('claude-3') || s.includes('claude-3-5')) return 200000;
-    if (s.includes('llama-3') || s.includes('llama3') || s.includes('mistral-large')) return 128000;
-    if (s.includes('deepseek') || s.includes('qwen')) return 64000;
-    return 8192;
-  };
-
-  const dynamicLocalModels: QuickModelItem[] = installedOllamaModels.map((modelTag) => {
-    const cleanName = modelTag.replace(':latest', '');
-    return {
-      id: modelTag,
-      name: cleanName,
-      category: 'local' as const,
-      badge: 'GPU',
-      tagline: `Installed Local Model (${cleanName})`,
-      isFree: true,
-    };
-  });
-
-  if (
-    activeProvider === 'ollama' &&
-    ollamaModel &&
-    !dynamicLocalModels.some((m) => m.id === ollamaModel)
-  ) {
-    const cleanName = ollamaModel.replace(':latest', '');
-    dynamicLocalModels.unshift({
-      id: ollamaModel,
-      name: cleanName,
-      category: 'local' as const,
-      badge: 'GPU',
-      tagline: `Active Local Model (${cleanName})`,
-      isFree: true,
-    });
-  }
-
-  const allAvailableModels: QuickModelItem[] = [...dynamicLocalModels, ...CLOUD_MODELS];
-
-  const filteredQuickModels = allAvailableModels.filter((m) => {
-    const matchesSearch =
-      m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
-      m.id.toLowerCase().includes(modelSearch.toLowerCase());
-    if (!matchesSearch) return false;
-    if (modelTab === 'local') return m.category === 'local';
-    if (modelTab === 'cloud') return m.category === 'cloud';
-    if (modelTab === 'free') return m.isFree;
-    return true;
-  });
-
-  const handleSelectQuickModel = (model: QuickModelItem) => {
-    if (model.category === 'local') {
-      localStorage.setItem('renoog_llm_provider', 'ollama');
-      localStorage.setItem('renoog_ollama_model', model.id);
-    } else {
-      localStorage.setItem('renoog_llm_provider', 'openrouter');
-      localStorage.setItem('renoog_model', model.id);
-    }
-    setIsModelDropdownOpen(false);
-  };
-
-  // Context Token Budget Calculation
-  const maxContextTokens = getModelMaxTokens(activeModel);
-  const roomLoreEstimate = 350;
-  const personaEstimate = 200;
-  const dialogueEstimate = currentRoomMessages.reduce(
-    (acc, m) => acc + Math.round(m.content.split(/\s+/).length * 1.3),
-    0
-  );
-  const totalEstimatedTokens = roomLoreEstimate + personaEstimate + dialogueEstimate;
-  const contextPercentage = Math.min(
-    100,
-    Math.round((totalEstimatedTokens / maxContextTokens) * 100)
-  );
-
-  const formatTokensShort = (tokens: number): string => {
-    if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
-    if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-    return tokens.toLocaleString();
-  };
 
   // Auto-scroll feed to bottom when new messages arrive
   const scrollToBottom = useCallback((smooth = true) => {
@@ -418,10 +273,10 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
 
   return (
     <div className="relative flex flex-col h-full w-full bg-[#0d0d10] text-zinc-100 overflow-hidden select-text">
-      {/* ─── 1. SIMULATION HEADER ────────────────────────────────────────────── */}
+      {/* ─── 1. SIMULATION HEADER (Spacious & Decluttered) ────────────────────── */}
       <header className="h-16 px-4 md:px-6 border-b border-[#202026] bg-[#121216]/95 backdrop-blur-md flex items-center justify-between shrink-0 z-20">
-        {/* Left: Identity & Room Info */}
-        <div className="flex items-center gap-3 min-w-0">
+        {/* Left: Room Identity & Ambience */}
+        <div className="flex items-center gap-3 min-w-0 pr-4">
           {onBackToHub && (
             <button
               type="button"
@@ -439,7 +294,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-white truncate">
+              <h1 className="text-sm font-bold text-white truncate max-w-44 sm:max-w-xs md:max-w-md">
                 {currentViewedRoom?.name || 'Simulation Chamber'}
               </h1>
               {isSpectating ? (
@@ -453,19 +308,19 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-zinc-400 truncate max-w-md hidden sm:block">
+            <p className="text-[11px] text-zinc-400 truncate max-w-sm sm:max-w-md hidden sm:block">
               {currentViewedRoom?.description || activeUniverse?.title}
             </p>
           </div>
         </div>
 
-        {/* Right: Controls & Tools */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {/* Right: Quick Tools & HUD Controls Trigger */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* Active Persona Trigger Pill */}
           <button
             type="button"
             onClick={() => setIsPersonaModalOpen(true)}
-            className="hidden sm:flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-emerald-500/25 hover:border-emerald-500/40 text-xs text-zinc-200 transition-colors cursor-pointer shadow-xs"
+            className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-emerald-500/25 hover:border-emerald-500/40 text-xs text-zinc-200 transition-colors cursor-pointer shadow-xs"
             title="Click to switch player roleplay persona"
           >
             <img
@@ -473,224 +328,10 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
               alt={activePersona.name}
               className="w-5 h-5 rounded-full object-cover ring-1 ring-emerald-500/50 shrink-0"
             />
-            <span className="font-semibold text-emerald-300 truncate max-w-28">
+            <span className="font-semibold text-emerald-300 truncate max-w-20 sm:max-w-28">
               {activePersona.name}
             </span>
             <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />
-          </button>
-
-          {/* Quick Model Selector Dropdown */}
-          <div className="relative" ref={modelDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-              className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl transition-all cursor-pointer truncate max-w-xs shadow-xs ${
-                activeProvider === 'ollama'
-                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-              }`}
-              title="Switch active AI model engine"
-            >
-              <Bot className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate hidden md:inline">{displayModelName}</span>
-              <ChevronDown className="w-3 h-3 opacity-70 shrink-0" />
-            </button>
-
-            {isModelDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl bg-[#18181b] border border-zinc-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-3 z-50 animate-in fade-in zoom-in-95 duration-150 text-xs">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
-                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-                    Simulation AI Engine
-                  </span>
-                  <span
-                    className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                      activeProvider === 'ollama'
-                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-                    }`}
-                  >
-                    {activeProvider === 'ollama' ? '🦙 GPU Local' : '🌐 Cloud API'}
-                  </span>
-                </div>
-
-                <div className="relative mb-2">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-                  <input
-                    type="text"
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    placeholder="Search models..."
-                    className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#121214] border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:border-indigo-500/60 outline-none"
-                  />
-                  {modelSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setModelSearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1 pb-2 mb-2 border-b border-zinc-800 overflow-x-auto scrollbar-none">
-                  {(
-                    [
-                      { id: 'all', label: 'All' },
-                      { id: 'local', label: '🦙 Local GPU' },
-                      { id: 'cloud', label: '🌐 Cloud' },
-                      { id: 'free', label: '✨ Free' },
-                    ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setModelTab(tab.id)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0 ${
-                        modelTab === tab.id
-                          ? 'bg-zinc-700 text-white shadow-xs'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
-                  {filteredQuickModels.map((m) => {
-                    const isSelected = activeModel === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => handleSelectQuickModel(m)}
-                        className={`w-full text-left p-2 rounded-xl transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                          isSelected
-                            ? m.category === 'local'
-                              ? 'bg-emerald-600/20 text-emerald-200 border border-emerald-500/40 shadow-xs'
-                              : 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/40 shadow-xs'
-                            : 'hover:bg-[#202024] text-zinc-300 border border-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <div
-                            className={`p-1 rounded-lg shrink-0 ${
-                              m.category === 'local'
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : 'bg-indigo-500/10 text-indigo-400'
-                            }`}
-                          >
-                            {m.category === 'local' ? (
-                              <HardDrive className="w-3.5 h-3.5" />
-                            ) : (
-                              <Globe className="w-3.5 h-3.5" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="font-semibold text-xs text-white truncate block">
-                              {m.name}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 truncate block">
-                              {m.tagline}
-                            </span>
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Context Token Budget Meter */}
-          <div ref={tokenDropdownRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setIsTokenDropdownOpen(!isTokenDropdownOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-white/5 text-xs text-zinc-300 transition-colors cursor-pointer"
-              title="Live context memory token usage"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="text-[10px] font-mono tabular-nums">
-                {formatTokensShort(totalEstimatedTokens)}/{formatTokensShort(maxContextTokens)}
-              </span>
-              <div className="w-12 h-1 bg-zinc-800 rounded-full overflow-hidden hidden md:block">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    contextPercentage > 80
-                      ? 'bg-red-500'
-                      : contextPercentage > 50
-                      ? 'bg-amber-500'
-                      : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.min(100, Math.max(4, contextPercentage))}%` }}
-                />
-              </div>
-            </button>
-
-            {isTokenDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl bg-[#18181b] border border-zinc-700 shadow-2xl p-3.5 z-50 text-xs">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-zinc-200">Context Memory</span>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
-                    {formatTokensShort(maxContextTokens)} Max
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 mb-3 text-[11px]">
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span>Room Lore & World:</span>
-                    <span className="font-mono text-zinc-200">{roomLoreEstimate} tokens</span>
-                  </div>
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span>Player Persona:</span>
-                    <span className="font-mono text-zinc-200">{personaEstimate} tokens</span>
-                  </div>
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span>Dialogue History:</span>
-                    <span className="font-mono text-zinc-200">{dialogueEstimate} tokens</span>
-                  </div>
-                  <div className="border-t border-zinc-800 pt-1 flex items-center justify-between font-bold">
-                    <span className="text-zinc-300">Total Usage:</span>
-                    <span className="font-mono text-emerald-400">
-                      {totalEstimatedTokens} ({contextPercentage}%)
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsTokenDropdownOpen(false);
-                    setInspectorTab('raw');
-                    setIsInspectorOpen(true);
-                  }}
-                  className="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Code2 className="w-3.5 h-3.5" />
-                  <span>Inspect Raw Prompt Payload</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Prompt Inspector Trigger */}
-          <button
-            type="button"
-            onClick={() => {
-              setInspectorTab('raw');
-              setIsInspectorOpen(true);
-            }}
-            className="p-2 rounded-xl bg-[#181820] hover:bg-[#202028] border border-white/5 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-            title="Inspect compiled prompt payload"
-          >
-            <Code2 className="w-4 h-4 text-indigo-400" />
           </button>
 
           {/* Occupants Stack with Clickable Popover */}
@@ -698,7 +339,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
             <button
               type="button"
               onClick={() => setIsOccupantsPopoverOpen(!isOccupantsPopoverOpen)}
-              className="hidden md:flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-white/5 hover:border-white/10 transition-colors cursor-pointer group"
+              className="hidden sm:flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-xl bg-[#181820] hover:bg-[#202028] border border-white/5 hover:border-white/10 transition-colors cursor-pointer group"
               title="Click to view all occupants in this room"
             >
               <span className="text-[11px] text-zinc-400 group-hover:text-zinc-200 flex items-center gap-1 transition-colors">
@@ -799,7 +440,22 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#1a1a22] hover:bg-[#22222d] text-zinc-200 border border-white/10 transition-colors shadow-xs cursor-pointer"
           >
             <MapPin className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Rooms ({locations.length})</span>
+            <span className="hidden md:inline">Rooms ({locations.length})</span>
+          </button>
+
+          {/* Modular HUD & Controls Trigger Button (Matching Image 2) */}
+          <button
+            type="button"
+            onClick={toggleRightSidebar}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+              isRightSidebarOpen
+                ? 'bg-amber-500 text-black font-bold shadow-amber-500/20'
+                : 'bg-[#1a1a22] hover:bg-[#22222d] text-zinc-300 border border-white/10 hover:border-amber-500/40'
+            }`}
+            title={isRightSidebarOpen ? 'Close HUD Controls' : 'Open Simulation HUD & Controls'}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">{isRightSidebarOpen ? 'HUD Open' : 'HUD'}</span>
           </button>
         </div>
       </header>
@@ -839,48 +495,51 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
         </div>
       )}
 
-      {/* ─── 3. SIMULATION FEED (MESSAGES) ───────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-        {turnGroups.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
-              <Sparkles className="w-6 h-6" />
+      {/* ─── 3. SIMULATION STAGE + DOCKED RIGHT SIDEBAR CONTAINER ─────────────── */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        {/* Center Simulation Column (Feed + Bottom Console) */}
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+          {turnGroups.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-zinc-200">This room is quiet</h3>
+              <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
+                {isSpectating
+                  ? 'No active conversations logged in this room yet. Use the director prompt below to initiate an event.'
+                  : 'Begin by describing an action or speaking to your companions using the console below.'}
+              </p>
             </div>
-            <h3 className="text-sm font-bold text-zinc-200">This room is quiet</h3>
-            <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-              {isSpectating
-                ? 'No active conversations logged in this room yet. Use the director prompt below to initiate an event.'
-                : 'Begin by describing an action or speaking to your companions using the console below.'}
-            </p>
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto space-y-4">
-            {turnGroups.map((group) => (
-              <div key={group.turnNumber} className="space-y-2">
-                {group.messages.map((message) => (
-                  <UniverseMessageBubble
-                    key={message.id}
-                    message={message}
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-4">
+              {turnGroups.map((group) => (
+                <div key={group.turnNumber} className="space-y-2">
+                  {group.messages.map((message) => (
+                    <UniverseMessageBubble
+                      key={message.id}
+                      message={message}
+                      locationId={currentViewedId}
+                      isStreaming={isStreaming}
+                    />
+                  ))}
+
+                  {/* Atomic Turn Scenario & Reroll Divider */}
+                  <UniverseTurnDivider
+                    turnNumber={group.turnNumber}
                     locationId={currentViewedId}
                     isStreaming={isStreaming}
                   />
-                ))}
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </main>
 
-                {/* Atomic Turn Scenario & Reroll Divider */}
-                <UniverseTurnDivider
-                  turnNumber={group.turnNumber}
-                  locationId={currentViewedId}
-                  isStreaming={isStreaming}
-                />
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </main>
-
-      {/* ─── 4. ADAPTIVE CONSOLE (BOTTOM INPUT BAR) ─────────────────────────── */}
-      <footer className="p-4 border-t border-[#202026] bg-[#121216]/95 backdrop-blur-md shrink-0 z-20">
+        {/* ─── 4. ADAPTIVE CONSOLE (BOTTOM INPUT BAR) ───────────────────────── */}
+        <footer className="p-4 border-t border-[#202026] bg-[#121216]/95 backdrop-blur-md shrink-0 z-20">
         <div className="max-w-4xl mx-auto">
           {isSpectating ? (
             /* ── SPECTATOR CONSOLE: Scene Continuation & Director Directive ── */
@@ -1024,8 +683,24 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
           )}
         </div>
       </footer>
+        </div>
 
-      {/* ─── 5. MODAL DRAWERS & INSPECTOR ────────────────────────────────────── */}
+        {/* ─── 5. DOCKED MODULAR RIGHT SIDEBAR / RAIL ───────────────────────── */}
+        <RightSidebar
+          character={synthesizedCharacter}
+          persona={activePersona}
+          roomOccupants={roomOccupants}
+          currentRoom={currentViewedRoom}
+          roomMessages={currentRoomMessages}
+          worldName={activeUniverse?.world_name || activeUniverse?.title}
+          onOpenInspector={(tab) => {
+            setInspectorTab(tab || 'raw');
+            setIsInspectorOpen(true);
+          }}
+        />
+      </div>
+
+      {/* ─── 6. MODAL DRAWERS & INSPECTORS ──────────────────────────────────── */}
       <LocationDrawer
         isOpen={isLocationDrawerOpen}
         onClose={() => setIsLocationDrawerOpen(false)}
@@ -1051,7 +726,6 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
           turns={synthesizedTurns}
           modelName={activeModel}
           temperature={0.9}
-          maxTokens={maxContextTokens}
           initialTab={inspectorTab}
           onClose={() => setIsInspectorOpen(false)}
         />

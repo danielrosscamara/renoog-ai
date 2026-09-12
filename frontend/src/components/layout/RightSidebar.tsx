@@ -15,6 +15,8 @@ import {
   Globe,
   Code2,
   Users,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import { api } from '../../services/api';
@@ -247,7 +249,18 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   }, [thoughtData.thought, thoughtData.isThinking]);
 
-  if (!isRightSidebarOpen) return null;
+  // Define tab navigation pills matching Image 2
+  const TABS = useMemo(
+    () => [
+      { id: 'engine' as const, label: 'Engine', icon: <Bot className="w-3.5 h-3.5" /> },
+      { id: 'tokens' as const, label: 'Tokens', icon: <Zap className="w-3.5 h-3.5" /> },
+      { id: 'thoughts' as const, label: 'Thoughts', icon: <Brain className="w-3.5 h-3.5" /> },
+      { id: 'occupants' as const, label: 'Cast', icon: <Users className="w-3.5 h-3.5" /> },
+      { id: 'prompt' as const, label: 'Prompt', icon: <Code2 className="w-3.5 h-3.5" /> },
+      { id: 'world' as const, label: 'World', icon: <Globe className="w-3.5 h-3.5" /> },
+    ],
+    []
+  );
 
   const handleCopyThought = () => {
     if (!thoughtData.thought) return;
@@ -256,26 +269,61 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Define tab navigation pills matching Image 2
-  const TABS = [
-    { id: 'engine' as const, label: 'Engine', icon: <Bot className="w-3.5 h-3.5" /> },
-    { id: 'tokens' as const, label: 'Tokens', icon: <Zap className="w-3.5 h-3.5" /> },
-    { id: 'thoughts' as const, label: 'Thoughts', icon: <Brain className="w-3.5 h-3.5" /> },
-    { id: 'occupants' as const, label: 'Cast', icon: <Users className="w-3.5 h-3.5" /> },
-    { id: 'prompt' as const, label: 'Prompt', icon: <Code2 className="w-3.5 h-3.5" /> },
-    { id: 'world' as const, label: 'World', icon: <Globe className="w-3.5 h-3.5" /> },
-  ];
+  // ─── DOCKED COLLAPSED RAIL (When isRightSidebarOpen is false on Desktop/Laptop >= 1024px) ───
+  if (!isRightSidebarOpen) {
+    return (
+      <aside
+        className="hidden lg:flex flex-col items-center py-3 px-1.5 w-14 bg-[#121216] border-l border-[#202026] h-full shrink-0 select-none z-20 animate-in slide-in-from-right-2 duration-150"
+        aria-label="Simulation HUD Collapsed Rail"
+      >
+        {/* Expand Trigger Button */}
+        <button
+          type="button"
+          onClick={toggleRightSidebar}
+          className="p-2 rounded-xl bg-[#1a1a22] hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/25 hover:border-amber-500 transition-all cursor-pointer mb-2 shadow-xs group"
+          title="Expand Simulation HUD & Controls"
+          aria-label="Expand Simulation HUD"
+        >
+          <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        </button>
+
+        <div className="w-6 h-px bg-white/10 my-1" />
+
+        {/* Quick Tab Jump Tool Icons */}
+        <div className="flex flex-col items-center gap-2 flex-1 w-full mt-1">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(t.id);
+                toggleRightSidebar();
+              }}
+              className="p-2 rounded-xl text-zinc-400 hover:text-amber-400 hover:bg-[#1a1a22] transition-all cursor-pointer relative group"
+              title={`Open ${t.label} tab`}
+            >
+              {t.icon}
+              {/* Floating Tooltip */}
+              <span className="absolute right-full mr-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-[#1a1a22] text-xs font-semibold text-zinc-100 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 shadow-xl z-50">
+                {t.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <>
-      {/* Responsive Backdrop Overlay on Mobile & Laptops (< 1280px) */}
+      {/* Responsive Backdrop Overlay on Mobile (< 1024px) */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 xl:hidden transition-opacity cursor-pointer"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden transition-opacity cursor-pointer"
         onClick={handleDismiss}
         aria-hidden="true"
       />
 
-      <aside className="fixed inset-y-0 right-0 z-40 w-80 sm:w-96 xl:static xl:z-20 xl:w-96 flex flex-col h-full bg-[#121216] border-l border-[#202026] shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl xl:shadow-none select-text">
+      <aside className="fixed inset-y-0 right-0 z-40 w-80 sm:w-96 lg:static lg:z-10 lg:w-88 xl:w-96 flex flex-col h-full bg-[#121216] border-l border-[#202026] shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl lg:shadow-none select-text">
         {/* Drawer Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#202026] bg-[#16161c]">
           <div className="flex items-center gap-2">
@@ -294,10 +342,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           <button
             type="button"
             onClick={handleDismiss}
-            aria-label="Close sidebar"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar to rail"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
