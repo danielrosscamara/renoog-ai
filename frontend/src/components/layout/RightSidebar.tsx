@@ -323,7 +323,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         aria-hidden="true"
       />
 
-      <aside className="fixed inset-y-0 right-0 z-40 w-80 sm:w-96 lg:static lg:z-10 lg:w-88 xl:w-96 flex flex-col h-full bg-[#121216] border-l border-[#202026] shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl lg:shadow-none select-text">
+      <aside className="fixed inset-y-0 right-0 z-40 w-80 sm:w-96 lg:static lg:z-10 lg:w-96 xl:w-100 flex flex-col h-full bg-[#121216] border-l border-[#202026] shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl lg:shadow-none select-text">
         {/* Drawer Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#202026] bg-[#16161c]">
           <div className="flex items-center gap-2">
@@ -346,12 +346,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             title="Collapse sidebar to rail"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-4 h-4 hidden lg:block" />
+            <X className="w-4 h-4 lg:hidden" />
           </button>
         </div>
 
-        {/* ─── MODULAR TABS NAVIGATION (Matching Image 2 with Gold/Amber Accent) ─── */}
-        <div className="flex items-center gap-1.5 p-2.5 bg-[#141418] border-b border-[#202026] overflow-x-auto scrollbar-none">
+        {/* ─── MODULAR TABS NAVIGATION (Balanced 3x2 Cockpit Grid) ─── */}
+        <div className="grid grid-cols-3 gap-1.5 p-2.5 bg-[#141418] border-b border-[#202026]">
           {TABS.map((t) => {
             const isActive = activeTab === t.id;
             return (
@@ -359,14 +360,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
                     : 'bg-[#1a1a22] hover:bg-[#242430] text-zinc-400 hover:text-zinc-200 border border-white/5'
                 }`}
               >
                 {t.icon}
-                <span>{t.label}</span>
+                <span className="truncate">{t.label}</span>
               </button>
             );
           })}
