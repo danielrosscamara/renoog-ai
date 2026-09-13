@@ -21,9 +21,22 @@ import {
 import { useChatStore } from '../../stores/useChatStore';
 import { api } from '../../services/api';
 import type { Character, Persona, MessageTurn } from '../../types';
-import type { UniverseMember, UniverseLocation, UniverseMessage } from '../../types/universe';
+import type {
+  UniverseMember,
+  UniverseLocation,
+  UniverseMessage,
+  TimelineEvent,
+} from '../../types/universe';
+import { UniverseTimeline } from '../universe/UniverseTimeline';
 
-export type RightSidebarTab = 'engine' | 'tokens' | 'thoughts' | 'occupants' | 'prompt' | 'world';
+export type RightSidebarTab =
+  | 'timeline'
+  | 'engine'
+  | 'tokens'
+  | 'thoughts'
+  | 'occupants'
+  | 'prompt'
+  | 'world';
 
 export interface RightSidebarProps {
   /** Optional 1-on-1 Chat character */
@@ -38,12 +51,18 @@ export interface RightSidebarProps {
   currentRoom?: UniverseLocation | null;
   /** Room messages in Universe mode */
   roomMessages?: UniverseMessage[];
+  /** Timeline events in Universe mode */
+  timelineEvents?: TimelineEvent[];
   /** World title */
   worldName?: string;
   /** Initial active tab */
   initialTab?: RightSidebarTab;
   /** Callback when user selects a model inside the Engine tab */
   onSelectModel?: (modelId: string, category: 'local' | 'cloud') => void;
+  /** Callback when user scrubs or selects a turn in timeline */
+  onSelectTurn?: (turnNumber: number) => void;
+  /** Callback when user selects a location in timeline */
+  onSelectLocation?: (locationId: string) => void;
   /** Callback to open full prompt inspector modal */
   onOpenInspector?: (tab?: 'layers' | 'raw') => void;
   /** Callback to close the sidebar/drawer */
@@ -75,9 +94,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   roomOccupants = [],
   currentRoom = null,
   roomMessages = [],
+  timelineEvents,
   worldName = 'Simulated Realm',
   initialTab = 'engine',
   onSelectModel,
+  onSelectTurn,
+  onSelectLocation,
   onOpenInspector,
   onClose,
 }) => {
@@ -89,6 +111,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   } = useChatStore();
 
   const [activeTab, setActiveTab] = useState<RightSidebarTab>(initialTab);
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [modelCategoryTab, setModelCategoryTab] = useState<'all' | 'local' | 'cloud' | 'free'>('all');
   const [installedOllamaModels, setInstalledOllamaModels] = useState<string[]>(() => {
@@ -249,15 +272,22 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   }, [thoughtData.thought, thoughtData.isThinking]);
 
-  // Define tab navigation pills matching Image 2
-  const TABS = useMemo(
+  // Define two-tiered tab navigation (Story & World vs AI Engine & Telemetry)
+  const STORY_TABS = useMemo(
+    () => [
+      { id: 'timeline' as const, label: 'Timeline', icon: <Clock className="w-3.5 h-3.5" /> },
+      { id: 'occupants' as const, label: 'Cast', icon: <Users className="w-3.5 h-3.5" /> },
+      { id: 'world' as const, label: 'World', icon: <Globe className="w-3.5 h-3.5" /> },
+    ],
+    []
+  );
+
+  const TECH_TABS = useMemo(
     () => [
       { id: 'engine' as const, label: 'Engine', icon: <Bot className="w-3.5 h-3.5" /> },
       { id: 'tokens' as const, label: 'Tokens', icon: <Zap className="w-3.5 h-3.5" /> },
       { id: 'thoughts' as const, label: 'Thoughts', icon: <Brain className="w-3.5 h-3.5" /> },
-      { id: 'occupants' as const, label: 'Cast', icon: <Users className="w-3.5 h-3.5" /> },
       { id: 'prompt' as const, label: 'Prompt', icon: <Code2 className="w-3.5 h-3.5" /> },
-      { id: 'world' as const, label: 'World', icon: <Globe className="w-3.5 h-3.5" /> },
     ],
     []
   );
@@ -289,9 +319,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         <div className="w-6 h-px bg-white/10 my-1" />
 
-        {/* Quick Tab Jump Tool Icons */}
-        <div className="flex flex-col items-center gap-2 flex-1 w-full mt-1">
-          {TABS.map((t) => (
+        {/* Quick Tab Jump Tool Icons: Story & Lore */}
+        <div className="flex flex-col items-center gap-1.5 flex-1 w-full mt-1">
+          {STORY_TABS.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -299,7 +329,37 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 setActiveTab(t.id);
                 toggleRightSidebar();
               }}
-              className="p-2 rounded-xl text-zinc-400 hover:text-amber-400 hover:bg-[#1a1a22] transition-all cursor-pointer relative group"
+              className={`p-2 rounded-xl transition-all cursor-pointer relative group ${
+                activeTab === t.id
+                  ? 'text-amber-400 bg-[#1a1a22] border border-amber-500/30'
+                  : 'text-zinc-400 hover:text-amber-400 hover:bg-[#1a1a22]'
+              }`}
+              title={`Open ${t.label} tab`}
+            >
+              {t.icon}
+              {/* Floating Tooltip */}
+              <span className="absolute right-full mr-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-[#1a1a22] text-xs font-semibold text-zinc-100 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity border border-white/10 shadow-xl z-50">
+                {t.label}
+              </span>
+            </button>
+          ))}
+
+          <div className="w-6 h-px bg-white/10 my-1" />
+
+          {/* Quick Tab Jump Tool Icons: AI Engine & Telemetry */}
+          {TECH_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(t.id);
+                toggleRightSidebar();
+              }}
+              className={`p-2 rounded-xl transition-all cursor-pointer relative group ${
+                activeTab === t.id
+                  ? 'text-amber-400 bg-[#1a1a22] border border-amber-500/30'
+                  : 'text-zinc-400 hover:text-amber-400 hover:bg-[#1a1a22]'
+              }`}
               title={`Open ${t.label} tab`}
             >
               {t.icon}
@@ -351,30 +411,73 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           </button>
         </div>
 
-        {/* ─── MODULAR TABS NAVIGATION (Balanced 3x2 Cockpit Grid) ─── */}
-        <div className="grid grid-cols-3 gap-1.5 p-2.5 bg-[#141418] border-b border-[#202026]">
-          {TABS.map((t) => {
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
-                    : 'bg-[#1a1a22] hover:bg-[#242430] text-zinc-400 hover:text-zinc-200 border border-white/5'
-                }`}
-              >
-                {t.icon}
-                <span className="truncate">{t.label}</span>
-              </button>
-            );
-          })}
+        {/* ─── MODULAR TABS NAVIGATION (Semantic 2-Tiered Avionics Grid) ─── */}
+        <div className="flex flex-col gap-1.5 p-2.5 bg-[#141418] border-b border-[#202026]">
+          {/* Tier 1: Story & Lore */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {STORY_TABS.map((t) => {
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
+                      : 'bg-[#1a1a22] hover:bg-[#242430] text-zinc-400 hover:text-zinc-200 border border-white/5'
+                  }`}
+                >
+                  {t.icon}
+                  <span className="truncate">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tier 2: AI Engine & Telemetry */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {TECH_TABS.map((t) => {
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
+                      : 'bg-[#1a1a22] hover:bg-[#242430] text-zinc-400 hover:text-zinc-200 border border-white/5'
+                  }`}
+                >
+                  {t.icon}
+                  <span className="truncate text-[11px]">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ─── DYNAMIC TAB CONTENT ─── */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          className={`flex-1 ${
+            activeTab === 'timeline'
+              ? 'overflow-hidden p-0'
+              : 'overflow-y-auto p-4 space-y-4'
+          }`}
+        >
+          {/* TAB 0: UNIVERSE STORY TIMELINE (2D COORDINATE MATRIX) */}
+          {activeTab === 'timeline' && (
+            <div className="h-full w-full">
+              <UniverseTimeline
+                events={timelineEvents}
+                isExpanded={isTimelineExpanded}
+                onToggleExpand={() => setIsTimelineExpanded((prev) => !prev)}
+                onSelectTurn={onSelectTurn}
+                onSelectLocation={onSelectLocation}
+              />
+            </div>
+          )}
           {/* TAB 1: ENGINE & MODEL SWITCHER */}
           {activeTab === 'engine' && (
             <div className="space-y-3.5 animate-in fade-in duration-150">
