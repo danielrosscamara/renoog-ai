@@ -57,6 +57,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   const returnToPhysicalLocation = useUniverseStore((state) => state.returnToPhysicalLocation);
   const setUserInputChannel = useUniverseStore((state) => state.setUserInputChannel);
   const getLocationOccupants = useUniverseStore((state) => state.getLocationOccupants);
+  const spectateLocation = useUniverseStore((state) => state.spectateLocation);
 
   // Store selectors & actions — Chat & Personas
   const {
@@ -180,6 +181,25 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   useEffect(() => {
     scrollToBottom(true);
   }, [currentRoomMessages.length, scrollToBottom]);
+
+  // Temporal Scrubber & Timeline Anchoring
+  const handleSelectTurn = useCallback((turnNum: number) => {
+    const el = document.getElementById(`turn_group_${turnNum}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
+      }, 2500);
+    }
+  }, []);
+
+  const handleSelectLocation = useCallback(
+    (locationId: string) => {
+      spectateLocation(locationId);
+    },
+    [spectateLocation]
+  );
 
   // Group messages by turn_number
   const turnGroups: { turnNumber: number; messages: UniverseMessage[] }[] = [];
@@ -515,7 +535,11 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
           ) : (
             <div className="max-w-4xl mx-auto space-y-4">
               {turnGroups.map((group) => (
-                <div key={group.turnNumber} className="space-y-2">
+                <div
+                  key={group.turnNumber}
+                  id={`turn_group_${group.turnNumber}`}
+                  className="space-y-2 rounded-2xl transition-all duration-300"
+                >
                   {group.messages.map((message) => (
                     <UniverseMessageBubble
                       key={message.id}
@@ -693,6 +717,9 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
           currentRoom={currentViewedRoom}
           roomMessages={currentRoomMessages}
           worldName={activeUniverse?.world_name || activeUniverse?.title}
+          initialTab="timeline"
+          onSelectTurn={handleSelectTurn}
+          onSelectLocation={handleSelectLocation}
           onOpenInspector={(tab) => {
             setInspectorTab(tab || 'raw');
             setIsInspectorOpen(true);
