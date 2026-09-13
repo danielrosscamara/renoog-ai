@@ -170,15 +170,15 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const maxContextTokens = getModelMaxTokens(activeModel);
 
-  // Derive estimated tokens across chat turns or room messages
+  // Derive estimated tokens across chat turns or room messages (Zero-allocation heuristic)
   const dialogueTokens = useMemo(() => {
     if (roomMessages.length > 0) {
-      return roomMessages.reduce((acc, m) => acc + Math.round(m.content.split(/\s+/).length * 1.3), 0);
+      return roomMessages.reduce((acc, m) => acc + Math.max(1, Math.round(m.content.length / 3.8)), 0);
     }
     if (turns.length > 0) {
       return turns.reduce((acc, t) => {
         const text = t.swipes[t.active_index] || '';
-        return acc + Math.round(text.split(/\s+/).length * 1.3);
+        return acc + Math.max(1, Math.round(text.length / 3.8));
       }, 0);
     }
     return 120;
