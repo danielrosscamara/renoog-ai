@@ -8,7 +8,7 @@ import type {
   TimelineEvent,
   PersonaPreset,
 } from '../types/universe';
-import type { Character } from '../types';
+import type { Character, Persona } from '../types';
 import type { WorldPreset } from '../data/worldPresets';
 import { DEFAULT_PERSONA_PRESET } from '../data/personaPresets';
 
@@ -133,6 +133,9 @@ export interface UniverseState {
   ) => void;
   stopStreaming: () => void;
   resetUniverse: () => void;
+
+  // Player Persona Synchronization & Persistence
+  setUserPersona: (persona: Persona) => void;
 
   // Dynamic Room Selectors (Pure derivations from members)
   getLocationOccupants: (locationId: string) => UniverseMember[];
@@ -1321,6 +1324,36 @@ export const useUniverseStore = create<UniverseState>()(
           isStreaming: false,
           streamingStage: 'idle',
           streamingContent: '',
+        });
+      },
+
+      setUserPersona: (persona) => {
+        const state = get();
+        const updatedMembers = state.members.map((m) =>
+          m.entity_type === 'user'
+            ? {
+                ...m,
+                display_name: persona.name,
+                name: persona.name,
+                avatar_url: persona.avatar_url,
+              }
+            : m
+        );
+
+        const updatedSaved = state.savedUniverses.map((record) => {
+          if (state.activeUniverse && record.universe.id === state.activeUniverse.id) {
+            return {
+              ...record,
+              members: updatedMembers,
+              lastActiveAt: new Date().toISOString(),
+            };
+          }
+          return record;
+        });
+
+        set({
+          members: updatedMembers,
+          savedUniverses: updatedSaved,
         });
       },
 
