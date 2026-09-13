@@ -29,6 +29,8 @@ export interface UniverseCockpitProps {
   onBackToHub?: () => void;
 }
 
+const EMPTY_MESSAGES: UniverseMessage[] = [];
+
 /**
  * UniverseCockpit
  *
@@ -58,6 +60,8 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   const setUserInputChannel = useUniverseStore((state) => state.setUserInputChannel);
   const getLocationOccupants = useUniverseStore((state) => state.getLocationOccupants);
   const spectateLocation = useUniverseStore((state) => state.spectateLocation);
+  const setUserPersona = useUniverseStore((state) => state.setUserPersona);
+  const timelineEvents = useUniverseStore((state) => state.timelineEvents);
 
   // Store selectors & actions — Chat & Personas
   const {
@@ -112,7 +116,10 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   const currentPhysicalRoom = locations.find((l) => l.id === currentPhysicalId) || null;
   const isSpectating = currentViewedId !== currentPhysicalId;
 
-  const currentRoomMessages = messagesByLocation[currentViewedId] || [];
+  const currentRoomMessages = useMemo(
+    () => messagesByLocation[currentViewedId] || EMPTY_MESSAGES,
+    [messagesByLocation, currentViewedId]
+  );
   const roomOccupants = getLocationOccupants(currentViewedId);
 
   // Resolve Active Persona
@@ -133,20 +140,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
   const handleSelectPersona = (persona: Persona) => {
     setActivePersona(persona.id);
     localStorage.setItem('renoog_last_persona_id', persona.id);
-
-    // Synchronize the user member in the active universe simulation session
-    useUniverseStore.setState((state) => ({
-      members: state.members.map((m) =>
-        m.entity_type === 'user'
-          ? {
-              ...m,
-              entity_id: persona.id,
-              display_name: persona.name,
-              avatar_url: persona.avatar_url,
-            }
-          : m
-      ),
-    }));
+    setUserPersona(persona);
   };
 
   // Active Model & Provider for status display in bottom bar
@@ -182,17 +176,38 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
     scrollToBottom(true);
   }, [currentRoomMessages.length, scrollToBottom]);
 
-  // Temporal Scrubber & Timeline Anchoring
-  const handleSelectTurn = useCallback((turnNum: number) => {
-    const el = document.getElementById(`turn_group_${turnNum}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
-      setTimeout(() => {
-        el.classList.remove('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
-      }, 2500);
-    }
-  }, []);
+  // Temporal Scrubber & Timeline Anchoring (Cross-Room Aware)
+  const handleSelectTurn = useCallback(
+    (turnNum: number) => {
+      // Find which room this turn took place in
+      let targetRoomId = currentViewedId;
+      for (const [roomId, msgs] of Object.entries(messagesByLocation)) {
+        if (msgs.some((m) => m.turn_number === turnNum)) {
+          targetRoomId = roomId;
+          break;
+        }
+      }
+
+      const scrollToTarget = () => {
+        const el = document.getElementById(`turn_group_${turnNum}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
+          setTimeout(() => {
+            el.classList.remove('ring-2', 'ring-amber-500/60', 'shadow-lg', 'shadow-amber-500/10');
+          }, 2500);
+        }
+      };
+
+      if (targetRoomId !== currentViewedId) {
+        spectateLocation(targetRoomId);
+        setTimeout(scrollToTarget, 120);
+      } else {
+        scrollToTarget();
+      }
+    },
+    [currentViewedId, messagesByLocation, spectateLocation]
+  );
 
   const handleSelectLocation = useCallback(
     (locationId: string) => {
@@ -201,16 +216,19 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
     [spectateLocation]
   );
 
-  // Group messages by turn_number
-  const turnGroups: { turnNumber: number; messages: UniverseMessage[] }[] = [];
-  currentRoomMessages.forEach((msg) => {
-    const existingGroup = turnGroups.find((g) => g.turnNumber === msg.turn_number);
-    if (existingGroup) {
-      existingGroup.messages.push(msg);
-    } else {
-      turnGroups.push({ turnNumber: msg.turn_number, messages: [msg] });
-    }
-  });
+  // Group messages by turn_number (Memoized)
+  const turnGroups = useMemo(() => {
+    const groups: { turnNumber: number; messages: UniverseMessage[] }[] = [];
+    currentRoomMessages.forEach((msg) => {
+      const existingGroup = groups.find((g) => g.turnNumber === msg.turn_number);
+      if (existingGroup) {
+        existingGroup.messages.push(msg);
+      } else {
+        groups.push({ turnNumber: msg.turn_number, messages: [msg] });
+      }
+    });
+    return groups;
+  }, [currentRoomMessages]);
 
   // Handle in-person message submission
   const handleSendMessage = (e?: React.FormEvent) => {
@@ -265,31 +283,49 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
     }
   };
 
-  // Synthesize inspector character card from lead companion or world
+  // Synthesize inspector character card from lead companion or world (Memoized)
   const leadCompanion = members.find((m) => m.entity_type === 'character');
-  const synthesizedCharacter: Character = {
-    id: leadCompanion?.entity_id || 'lead_companion',
-    name: leadCompanion?.display_name || activeUniverse?.world_name || 'World Simulation',
-    tagline: currentViewedRoom?.description || 'Active Universe Scene',
-    description: `Current World: ${activeUniverse?.world_name || 'Simulated Realm'}. Room: ${currentViewedRoom?.name || 'Simulation Chamber'}.`,
-    personality: 'Adaptive AI companions and world narrator.',
-    scenario: currentViewedRoom?.description || 'Exploring the area.',
-    first_mes: currentRoomMessages[0]?.content || 'Simulation initialized.',
-    avatar_url: leadCompanion?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-    tags: ['Universe', 'Simulation'],
-    is_favorite: false,
-    creator: 'System',
-    created_at: new Date().toISOString(),
-  };
+  const synthesizedCharacter: Character = useMemo(
+    () => ({
+      id: leadCompanion?.entity_id || 'lead_companion',
+      name: leadCompanion?.display_name || activeUniverse?.world_name || 'World Simulation',
+      tagline: currentViewedRoom?.description || 'Active Universe Scene',
+      description: `Current World: ${activeUniverse?.world_name || 'Simulated Realm'}. Room: ${currentViewedRoom?.name || 'Simulation Chamber'}.`,
+      personality: 'Adaptive AI companions and world narrator.',
+      scenario: currentViewedRoom?.description || 'Exploring the area.',
+      first_mes: currentRoomMessages[0]?.content || 'Simulation initialized.',
+      avatar_url:
+        leadCompanion?.avatar_url ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+      tags: ['Universe', 'Simulation'],
+      is_favorite: false,
+      creator: 'System',
+      created_at: activeUniverse?.created_at || new Date().toISOString(),
+    }),
+    [
+      leadCompanion?.entity_id,
+      leadCompanion?.display_name,
+      leadCompanion?.avatar_url,
+      activeUniverse?.world_name,
+      activeUniverse?.created_at,
+      currentViewedRoom?.name,
+      currentViewedRoom?.description,
+      currentRoomMessages,
+    ]
+  );
 
-  const synthesizedTurns: MessageTurn[] = currentRoomMessages.map((m) => ({
-    id: m.id,
-    chat_id: activeUniverse?.id || 'sim',
-    role: m.sender_type === 'user' ? 'user' : 'assistant',
-    active_index: m.active_swipe_index,
-    swipes: m.swipes,
-    created_at: m.created_at,
-  }));
+  const synthesizedTurns: MessageTurn[] = useMemo(
+    () =>
+      currentRoomMessages.map((m) => ({
+        id: m.id,
+        chat_id: activeUniverse?.id || 'sim',
+        role: m.sender_type === 'user' ? 'user' : 'assistant',
+        active_index: m.active_swipe_index,
+        swipes: m.swipes,
+        created_at: m.created_at,
+      })),
+    [currentRoomMessages, activeUniverse?.id]
+  );
 
   return (
     <div className="relative flex flex-col h-full w-full bg-[#0d0d10] text-zinc-100 overflow-hidden select-text">
@@ -716,6 +752,7 @@ export const UniverseCockpit: React.FC<UniverseCockpitProps> = ({ onBackToHub })
           roomOccupants={roomOccupants}
           currentRoom={currentViewedRoom}
           roomMessages={currentRoomMessages}
+          timelineEvents={timelineEvents}
           worldName={activeUniverse?.world_name || activeUniverse?.title}
           initialTab="timeline"
           onSelectTurn={handleSelectTurn}
