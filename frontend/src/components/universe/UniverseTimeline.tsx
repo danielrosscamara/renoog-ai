@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Clock,
   Users,
@@ -14,6 +15,7 @@ import {
   Layers,
   Activity,
   ArrowRight,
+  Shield,
 } from 'lucide-react';
 import type {
   TimelineEvent,
@@ -68,6 +70,7 @@ interface TurnColumnData {
   minRowIndex: number;
   maxRowIndex: number;
   hasMultiCharacterScene: boolean;
+  isDialogueTurn: boolean;
 }
 
 const ROW_HEIGHT_PX = 56; // Fixed height per entity row for exact SVG chord calculation
@@ -88,8 +91,8 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
   const storeTimelineEvents = useUniverseStore((s) => s.timelineEvents);
   const storeTurnCount = useUniverseStore((s) => s.turnCount);
 
-  // Local State
-  const [viewMode, setViewMode] = useState<TimelineViewMode>('matrix');
+  // Local State: Smart Default (Ledger in dock, Matrix in Theater mode)
+  const [viewMode, setViewMode] = useState<TimelineViewMode>(isExpanded ? 'matrix' : 'ledger');
   const [activeSubTab, setActiveSubTab] = useState<SubProjectTab>('timeline');
   const [scaleMode, setScaleMode] = useState<TemporalScale>('turn');
   const [selectedTurn, setSelectedTurn] = useState<number>(storeTurnCount || 1);
@@ -105,6 +108,22 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
   const [ledgerFilter, setLedgerFilter] = useState<TimelineEventType | 'all'>('all');
 
   const matrixScrollRef = useRef<HTMLDivElement>(null);
+
+  // Synchronize scrubber slider with advancing turns (Render-phase state adjustment)
+  const [prevTurnCount, setPrevTurnCount] = useState(storeTurnCount);
+  const [prevIsExpanded, setPrevIsExpanded] = useState(isExpanded);
+
+  if (storeTurnCount !== prevTurnCount) {
+    setPrevTurnCount(storeTurnCount);
+    setSelectedTurn(storeTurnCount || 1);
+  }
+
+  if (isExpanded !== prevIsExpanded) {
+    setPrevIsExpanded(isExpanded);
+    if (isExpanded) {
+      setViewMode('matrix');
+    }
+  }
 
   // Resolve Active Events and Members
   const activeEvents = useMemo(
@@ -124,6 +143,28 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
     });
     return list;
   }, [storeMessagesByLocation]);
+
+  // Pre-index messages by turn for O(1) retrieval (P1 Opt 1 Complexity Fix)
+  const messagesByTurn = useMemo(() => {
+    const map = new Map<number, UniverseMessage[]>();
+    allMessages.forEach((m) => {
+      const list = map.get(m.turn_number) || [];
+      list.push(m);
+      map.set(m.turn_number, list);
+    });
+    return map;
+  }, [allMessages]);
+
+  // Pre-index events by turn for O(1) retrieval (P1 Opt 1 Complexity Fix)
+  const eventsByTurn = useMemo(() => {
+    const map = new Map<number, TimelineEvent[]>();
+    activeEvents.forEach((e) => {
+      const list = map.get(e.turn_number) || [];
+      list.push(e);
+      map.set(e.turn_number, list);
+    });
+    return map;
+  }, [activeEvents]);
 
   // Derive Maximum Turn
   const maxTurn = useMemo(() => {
@@ -180,7 +221,6 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
     const map = new Map<string, number>();
     entityRows.forEach((row, idx) => {
       map.set(row.id, idx);
-      // Also map companion character IDs
       map.set(row.name.toLowerCase(), idx);
     });
     return map;
@@ -203,36 +243,47 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
     };
   }, [maxTurn, storeUniverse?.world_name]);
 
-  // Build 2D Turn Columns (X-Axis Data Matrix)
+  // Build 2D Turn Columns (X-Axis Data Matrix with O(1) Pre-Indexed Map Lookups)
   const turnColumns: TurnColumnData[] = useMemo(() => {
     const columns: TurnColumnData[] = [];
 
     for (let t = 1; t <= maxTurn; t++) {
-      const turnMsgs = allMessages.filter((m) => m.turn_number === t);
-      const turnEvts = activeEvents.filter((e) => e.turn_number === t);
+      const turnMsgs = messagesByTurn.get(t) || [];
+      const turnEvts = eventsByTurn.get(t) || [];
 
       const participants = new Set<string>();
       const cellDataByEntity = new Map<string, TurnCellData>();
       const locationGroupings = new Map<string, string[]>();
+      let hasDialogue = false;
 
-      // Ingest messages
+      // Ingest messages with strict typing and companion attribution (P0 Bug 2 Fix)
       turnMsgs.forEach((msg) => {
         let matchedEntity = entityRows.find(
           (r) =>
+            r.id === msg.sender_id ||
             r.name.toLowerCase() === msg.sender_name.toLowerCase() ||
             (msg.sender_type === 'narrator' && r.type === 'narrator') ||
             (msg.sender_type === 'user' && r.type === 'user')
         );
 
+        // Strict fallback based on sender_type without falsely defaulting to user
         if (!matchedEntity) {
-          matchedEntity =
-            msg.sender_type === 'narrator'
-              ? entityRows.find((r) => r.type === 'narrator')
-              : entityRows.find((r) => r.type === 'user');
+          if (msg.sender_type === 'narrator') {
+            matchedEntity = entityRows.find((r) => r.type === 'narrator');
+          } else if (msg.sender_type === 'user') {
+            matchedEntity = entityRows.find((r) => r.type === 'user');
+          } else if (msg.sender_type === 'character') {
+            matchedEntity =
+              entityRows.find((r) => r.id === msg.sender_id) ||
+              entityRows.find((r) => r.type === 'character');
+          }
         }
 
         if (matchedEntity) {
           participants.add(matchedEntity.id);
+          if (matchedEntity.type !== 'narrator') {
+            hasDialogue = true;
+          }
 
           const existing = cellDataByEntity.get(matchedEntity.id) || {
             turnNumber: t,
@@ -272,6 +323,9 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
 
         if (matchedEntity) {
           participants.add(matchedEntity.id);
+          if (evt.event_type === 'conversation') {
+            hasDialogue = true;
+          }
           const existing = cellDataByEntity.get(matchedEntity.id) || {
             turnNumber: t,
             entityId: matchedEntity.id,
@@ -315,11 +369,27 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
         minRowIndex: minRow === 999 ? 0 : minRow,
         maxRowIndex: maxRow === -1 ? 0 : maxRow,
         hasMultiCharacterScene: hasMulti,
+        isDialogueTurn: hasDialogue,
       });
     }
 
     return columns;
-  }, [maxTurn, allMessages, activeEvents, entityRows, storeLocations, entityRowIndexMap]);
+  }, [
+    maxTurn,
+    messagesByTurn,
+    eventsByTurn,
+    entityRows,
+    storeLocations,
+    entityRowIndexMap,
+  ]);
+
+  // Sub-Tab Filtered Turn Columns (for Chats tab)
+  const displayedTurnColumns = useMemo(() => {
+    if (activeSubTab === 'chats') {
+      return turnColumns.filter((c) => c.isDialogueTurn);
+    }
+    return turnColumns;
+  }, [turnColumns, activeSubTab]);
 
   // Handle Scrubber Interaction
   const handleScrubberChange = useCallback(
@@ -342,15 +412,29 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
 
   // Filtered Ledger Events
   const filteredLedgerEvents = useMemo(() => {
+    if (activeSubTab === 'chats') {
+      return activeEvents.filter((e) => e.event_type === 'conversation');
+    }
     if (ledgerFilter === 'all') return activeEvents;
     return activeEvents.filter((e) => e.event_type === ledgerFilter);
-  }, [activeEvents, ledgerFilter]);
+  }, [activeEvents, ledgerFilter, activeSubTab]);
 
-  return (
+  // Active Companions for the Ordering Tab
+  const activeCompanions = useMemo(
+    () => activeMembers.filter((m) => m.entity_type === 'character' && m.is_active),
+    [activeMembers]
+  );
+  const activeUser = useMemo(
+    () => activeMembers.find((m) => m.entity_type === 'user'),
+    [activeMembers]
+  );
+
+  // ─── MAIN RENDER TREE ───
+  const content = (
     <div
       className={`flex flex-col bg-[#121216] border border-[#202026] text-zinc-200 select-none ${
         isExpanded
-          ? 'fixed inset-4 md:inset-8 z-50 rounded-2xl shadow-2xl overflow-hidden'
+          ? 'w-full h-full max-w-6xl max-h-[85vh] rounded-2xl shadow-2xl overflow-hidden'
           : 'h-full w-full rounded-none'
       }`}
     >
@@ -366,7 +450,7 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
                 {storeUniverse?.title || 'Universe Flight Recorder'}
               </span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#202028] text-amber-400 font-semibold border border-white/5 uppercase">
-                2D Matrix
+                {activeSubTab === 'ordering' ? 'Turn Priority' : '2D Matrix'}
               </span>
             </div>
             <span className="text-[11px] text-zinc-400 block truncate">
@@ -377,33 +461,34 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
 
         {/* View Controls & Expansion */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* View Toggle */}
-          <div className="flex items-center bg-[#1a1a22] p-0.5 rounded-lg border border-white/5">
-            <button
-              type="button"
-              onClick={() => setViewMode('matrix')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                viewMode === 'matrix'
-                  ? 'bg-amber-500 text-black font-bold shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Switch to 2D Coordinate Matrix"
-            >
-              <Grid3x3 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('ledger')}
-              className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                viewMode === 'ledger'
-                  ? 'bg-amber-500 text-black font-bold shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Switch to Linear Ledger Feed"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {activeSubTab !== 'ordering' && (
+            <div className="flex items-center bg-[#1a1a22] p-0.5 rounded-lg border border-white/5">
+              <button
+                type="button"
+                onClick={() => setViewMode('matrix')}
+                className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                  viewMode === 'matrix'
+                    ? 'bg-amber-500 text-black font-bold shadow-xs'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title="Switch to 2D Coordinate Matrix"
+              >
+                <Grid3x3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('ledger')}
+                className={`p-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                  viewMode === 'ledger'
+                    ? 'bg-amber-500 text-black font-bold shadow-xs'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title="Switch to Linear Ledger Feed"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Fullscreen / Theater Toggle */}
           {onToggleExpand && (
@@ -431,7 +516,7 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
             onClick={() => setActiveSubTab('chats')}
             className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'chats'
-                ? 'bg-zinc-800 text-white font-semibold'
+                ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
             }`}
           >
@@ -443,7 +528,7 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
             onClick={() => setActiveSubTab('ordering')}
             className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'ordering'
-                ? 'bg-zinc-800 text-white font-semibold'
+                ? 'bg-violet-500/20 text-violet-300 font-bold border border-violet-500/30'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
             }`}
           >
@@ -465,88 +550,185 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
         </div>
 
         {/* Temporal Granularity Scale */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] uppercase font-bold text-zinc-500 hidden sm:inline">
-            Scale:
-          </span>
-          <select
-            value={scaleMode}
-            onChange={(e) => setScaleMode(e.target.value as TemporalScale)}
-            className="bg-[#1a1a22] text-zinc-300 text-[11px] font-medium px-2 py-0.5 rounded border border-white/5 focus:outline-hidden cursor-pointer"
-          >
-            <option value="turn">Turn</option>
-            <option value="hour">In-Game Hour</option>
-          </select>
-        </div>
+        {activeSubTab !== 'ordering' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase font-bold text-zinc-500 hidden sm:inline">
+              Scale:
+            </span>
+            <select
+              value={scaleMode}
+              onChange={(e) => setScaleMode(e.target.value as TemporalScale)}
+              className="bg-[#1a1a22] text-zinc-300 text-[11px] font-medium px-2 py-0.5 rounded border border-white/5 focus:outline-hidden cursor-pointer"
+            >
+              <option value="turn">Turn</option>
+              <option value="hour">In-Game Hour</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* ─── ZONE 3: TEMPORAL SCRUBBER & IN-WORLD CALENDAR ─── */}
-      <div className="p-3 bg-[#16161c] border-b border-[#202026] space-y-2 shrink-0">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-bold flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              <span>
-                {scaleMode === 'turn' ? `Turn #${selectedTurn}` : `Hour ${18 + ((selectedTurn - 1) % 6)}:00`}
+      {activeSubTab !== 'ordering' && (
+        <div className="p-3 bg-[#16161c] border-b border-[#202026] space-y-2 shrink-0">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 font-bold flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  {scaleMode === 'turn'
+                    ? `Turn #${selectedTurn}`
+                    : `Hour ${18 + ((selectedTurn - 1) % 6)}:00`}
+                </span>
               </span>
-            </span>
-            <span className="text-[11px] text-zinc-400">/ {maxTurn} total</span>
+              <span className="text-[11px] text-zinc-400">/ {maxTurn} total</span>
+            </div>
+
+            <div className="flex items-center gap-1 text-[11px] text-zinc-400 font-mono">
+              <Calendar className="w-3 h-3 text-zinc-500" />
+              <span>
+                ERA {calendarMetadata.year} · {calendarMetadata.month} · DAY {calendarMetadata.day}
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-zinc-400 font-mono">
-            <Calendar className="w-3 h-3 text-zinc-500" />
-            <span>
-              ERA {calendarMetadata.year} · {calendarMetadata.month} · DAY {calendarMetadata.day}
-            </span>
+          {/* Interactive Range Scrubber */}
+          <div className="relative flex items-center">
+            <input
+              type="range"
+              min={1}
+              max={Math.max(1, maxTurn)}
+              value={selectedTurn}
+              onChange={handleScrubberChange}
+              className="w-full h-1.5 bg-[#242430] rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-hidden"
+            />
           </div>
         </div>
+      )}
 
-        {/* Interactive Range Scrubber */}
-        <div className="relative flex items-center">
-          <input
-            type="range"
-            min={1}
-            max={Math.max(1, maxTurn)}
-            value={selectedTurn}
-            onChange={handleScrubberChange}
-            className="w-full h-1.5 bg-[#242430] rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-hidden"
-          />
-        </div>
-      </div>
-
-      {/* ─── ZONE 4: MAIN CONTENT (2D MATRIX OR LEDGER) ─── */}
+      {/* ─── ZONE 4: MAIN CONTENT ─── */}
       <div className="flex-1 overflow-hidden relative">
-        {viewMode === 'matrix' ? (
-          <div className="flex h-full w-full overflow-hidden">
+        {/* SUB-TAB VIEW: ORDERING (Feature 2 Preview) */}
+        {activeSubTab === 'ordering' ? (
+          <div className="h-full overflow-y-auto p-4 space-y-4">
+            <div className="p-3.5 rounded-2xl bg-[#16161c] border border-violet-500/25 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>3-Role Sequential Turn Order</span>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-violet-500/15 text-violet-300">
+                  Active Rule
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                Renoog AI executes universe simulations in a strict deterministic sequence: the Narrator anchors the room environment, followed by autonomous companion banter, concluding with player agency.
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Step 1: Narrator Engine */}
+              <div className="p-3.5 rounded-xl bg-[#181820] border border-white/5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0 font-bold text-xs">
+                    1
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-violet-400" />
+                      <span>Narrator Engine</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Atmospheric stage setting, sensory details, and room state updates.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-violet-500/20 text-violet-300 shrink-0">
+                  Stage 1
+                </span>
+              </div>
+
+              {/* Step 2: Room Companions */}
+              <div className="p-3.5 rounded-xl bg-[#181820] border border-amber-500/20 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 font-bold text-xs">
+                    2
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Room Companions ({activeCompanions.length})</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {activeCompanions.map((c) => (
+                        <span
+                          key={c.id}
+                          className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/25 font-semibold"
+                        >
+                          {c.display_name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 shrink-0">
+                  Stage 2
+                </span>
+              </div>
+
+              {/* Step 3: Player Persona */}
+              <div className="p-3.5 rounded-xl bg-[#181820] border border-emerald-500/20 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold text-xs">
+                    3
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Player Persona</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {activeUser?.display_name || 'Player'} responds or directs room movement.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 shrink-0">
+                  Stage 3
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'matrix' ? (
+          /* ─── 2D COORDINATE MATRIX VIEW (Unified Vertical Scroll Polish) ─── */
+          <div className="flex h-full w-full overflow-y-auto overflow-x-hidden relative">
             {/* STICKY LEFT ENTITY AXIS (COORDINATE) */}
-            <div className="w-40 sm:w-48 bg-[#141418] border-r border-[#202026] shrink-0 flex flex-col z-20 shadow-lg select-none">
+            <div className="w-36 sm:w-44 bg-[#141418] border-r border-[#202026] shrink-0 flex flex-col sticky left-0 z-20 shadow-xl select-none">
               {/* Header Cell */}
-              <div className="h-9 px-3 flex items-center text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-[#202026] bg-[#16161c]">
+              <div className="h-9 px-3 flex items-center text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-[#202026] bg-[#16161c] sticky top-0 z-30">
                 COORDINATE
               </div>
 
               {/* Entity Rows */}
-              <div className="flex-1 overflow-y-hidden">
+              <div className="flex-1">
                 {entityRows.map((entity) => (
                   <div
                     key={entity.id}
                     style={{ height: `${ROW_HEIGHT_PX}px` }}
-                    className="flex items-center gap-2 px-3 border-b border-[#202026]/70 hover:bg-white/5 transition-colors"
+                    className="flex items-center gap-2 px-2.5 border-b border-[#202026]/70 hover:bg-white/5 transition-colors"
                   >
                     {/* Avatar */}
                     {entity.type === 'narrator' ? (
-                      <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0">
-                        <Globe className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0">
+                        <Globe className="w-3.5 h-3.5" />
                       </div>
                     ) : entity.avatarUrl ? (
                       <img
                         src={entity.avatarUrl}
                         alt={entity.name}
-                        className="w-8 h-8 rounded-lg object-cover ring-1 ring-amber-500/40 shrink-0"
+                        className="w-7 h-7 rounded-lg object-cover ring-1 ring-amber-500/40 shrink-0"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 shrink-0">
-                        <User className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 shrink-0">
+                        <User className="w-3.5 h-3.5" />
                       </div>
                     )}
 
@@ -563,15 +745,15 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
             {/* HORIZONTALLY SCROLLABLE TURN MATRIX */}
             <div
               ref={matrixScrollRef}
-              className="flex-1 overflow-x-auto overflow-y-hidden relative bg-[#101014]"
+              className="flex-1 overflow-x-auto relative bg-[#101014]"
             >
               <div
                 className="flex flex-col h-full"
-                style={{ width: `${turnColumns.length * 96}px`, minWidth: '100%' }}
+                style={{ width: `${displayedTurnColumns.length * 96}px`, minWidth: '100%' }}
               >
                 {/* Column Headers (X-Axis: Turns) */}
                 <div className="h-9 flex border-b border-[#202026] bg-[#16161c] sticky top-0 z-10">
-                  {turnColumns.map((col) => {
+                  {displayedTurnColumns.map((col) => {
                     const isColSelected = col.turnNumber === selectedTurn;
                     return (
                       <button
@@ -607,11 +789,11 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
                   <svg
                     className="absolute inset-0 pointer-events-none z-10"
                     style={{
-                      width: `${turnColumns.length * 96}px`,
+                      width: `${displayedTurnColumns.length * 96}px`,
                       height: `${entityRows.length * ROW_HEIGHT_PX}px`,
                     }}
                   >
-                    {turnColumns.map((col, colIdx) => {
+                    {displayedTurnColumns.map((col, colIdx) => {
                       if (!col.hasMultiCharacterScene) return null;
                       const xPos = colIdx * 96 + 48; // center of the column
                       const y1 = col.minRowIndex * ROW_HEIGHT_PX + ROW_HEIGHT_PX / 2;
@@ -648,7 +830,7 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
 
                   {/* Cell Columns */}
                   <div className="flex h-full">
-                    {turnColumns.map((col) => {
+                    {displayedTurnColumns.map((col) => {
                       const isColSelected = col.turnNumber === selectedTurn;
 
                       return (
@@ -723,7 +905,7 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
 
                                       {/* Stack Chip 2 (if multiple messages/events in turn) */}
                                       {messageCount + eventCount > 1 && (
-                                        <div className="w-6 h-6 rounded-full bg-amber-400 text-black ring-1 ring-black flex items-center justify-center text-[10px] font-bold shadow-xs">
+                                        <div className="w-5 h-5 rounded-full bg-amber-400 text-black ring-1 ring-black flex items-center justify-center text-[9px] font-bold shadow-xs">
                                           +{messageCount + eventCount - 1}
                                         </div>
                                       )}
@@ -745,24 +927,26 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
           /* ─── ALTERNATIVE VIEW: LINEAR CHRONOLOGICAL LEDGER ─── */
           <div className="h-full flex flex-col p-4 overflow-y-auto space-y-3">
             {/* Filter Pills */}
-            <div className="flex flex-wrap gap-1.5 pb-2 border-b border-[#202026]">
-              {(['all', 'movement', 'conversation', 'environmental', 'encounter'] as const).map(
-                (filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setLedgerFilter(filter)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
-                      ledgerFilter === filter
-                        ? 'bg-amber-500 text-black font-bold shadow-xs'
-                        : 'bg-[#181820] hover:bg-[#22222c] text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                )
-              )}
-            </div>
+            {activeSubTab !== 'chats' && (
+              <div className="flex flex-wrap gap-1.5 pb-2 border-b border-[#202026]">
+                {(['all', 'movement', 'conversation', 'environmental', 'encounter'] as const).map(
+                  (filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setLedgerFilter(filter)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
+                        ledgerFilter === filter
+                          ? 'bg-amber-500 text-black font-bold shadow-xs'
+                          : 'bg-[#181820] hover:bg-[#22222c] text-zinc-400 hover:text-white border border-white/5'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  )
+                )}
+              </div>
+            )}
 
             {/* Event Cards */}
             {filteredLedgerEvents.length > 0 ? (
@@ -864,4 +1048,16 @@ export const UniverseTimeline: React.FC<UniverseTimelineProps> = ({
       </div>
     </div>
   );
+
+  // Render via React Portal if expanded into Theater Mode to escape CSS stacking context
+  if (isExpanded) {
+    return createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
+        {content}
+      </div>,
+      document.body
+    );
+  }
+
+  return content;
 };
