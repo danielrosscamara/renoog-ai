@@ -1,59 +1,193 @@
 @import "tailwindcss";
 
 /*
-  Design token system.
-  :root = LIGHT mode default. .dark = dark mode override.
-  Toggle by adding/removing the `dark` class on <html> (see hooks/useTheme.ts).
+  Design tokens — see the frontend-v2 UI design brief.
+  :root = DARK (primary). .light = light override. Toggled on <html> by hooks/useTheme.ts.
+  Optional skins (.theme-y2k, .theme-neutral) redefine these same variables — never
+  add component-level colors to support a theme.
 
-  Rule of thumb for anyone adding new UI:
-  - Never hardcode a hex value or a Tailwind color utility (bg-indigo-500, text-zinc-400, etc.)
-  - Always reach for one of the vars below instead.
-  - `--success` / `--danger` / `--warning` are SEMANTIC — only use them for real
-    status (online, error, context-limit warning). Never use them as decoration.
-  - `--accent` is the ONE brand color. Don't introduce a second accent.
+  Rules for anyone adding UI:
+  - Tokens only. Tailwind's default palette is removed below, so `bg-indigo-500`
+    and friends do not exist. Never hardcode a hex in a component.
+  - `--accent` is the ONLY decorative color. success/danger/warning are semantic only.
+  - `--accent-quiet` is a fill (selected rows, active states), never a text color.
+  - Contrast on the real backdrop (AA, 4.5:1), beyond the table in the brief:
+      --text-faint  → only on --bg / --surface-1. On --surface-2 or --accent-quiet
+                      it drops below 4.5:1 — step up to --text-dim there.
+      --accent text → not on --surface-2 in dark (4.3:1).
+      text ON accent fills → --on-accent (= --bg). White on dark accent is 3.7:1.
+  - Spacing: 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 only (Tailwind 1 2 3 4 6 8 12 16).
 */
 
 :root {
-  --surface-0: #f4f4f5; /* page canvas */
-  --surface-1: #ffffff; /* cards, sidebars, headers */
-  --surface-2: #f9fafb; /* hover / secondary surface */
-  --border-default: #e4e4e7;
-  --border-hover: #d4d4d8;
-  --text-primary: #18181b;
-  --text-secondary: #71717a;
+  color-scheme: dark;
 
-  --accent: #18181b;
-  --accent-soft: rgb(24 24 27 / 0.06);
-  --accent-ring: rgb(24 24 27 / 0.15);
+  --bg: #141317;
+  --surface-1: #1c1a20;
+  --surface-2: #24222a;
+  --border: #2e2b35;
+  --border-hover: #3d3945;
 
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --text: #edeaf0;
+  --text-dim: #a8a2b2;
+  --text-faint: #8a8496;
+
+  --accent: #8b6dff;
+  --accent-hover: #9d83ff;
+  --accent-quiet: #221c3a;
+
+  --success: #4ade80;
+  --danger: #f87171;
+  --warning: #fbbf24;
+
+  /* Dark separates surfaces by lightness, never shadow. */
+  --elevation: none;
 }
 
-.dark {
-  --surface-0: #121214;
-  --surface-1: #18181b;
-  --surface-2: #202024;
-  --border-default: #27272a;
-  --border-hover: #3f3f46;
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
+.light {
+  color-scheme: light;
 
-  --accent: #f4f4f5;
-  --accent-soft: rgb(244 244 245 / 0.08);
-  --accent-ring: rgb(244 244 245 / 0.2);
+  --bg: #faf9f7;
+  --surface-1: #ffffff;
+  --surface-2: #f2f0ed;
+  --border: #e6e2dc;
+  --border-hover: #d4cfc7;
 
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --text: #1c1b22;
+  --text-dim: #5c5866;
+  --text-faint: #6f6b79;
+
+  --accent: #6d4be0;
+  --accent-hover: #5b3bcc;
+  --accent-quiet: #f0ebff;
+
+  --success: #15803d;
+  --danger: #dc2626;
+  --warning: #b45309;
+
+  --elevation: 0 1px 3px rgba(28, 27, 34, 0.06);
 }
 
-body {
-  background-color: var(--surface-0);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
+@theme inline {
+  /* Wipe Tailwind defaults so only tokens can be used. */
+  --color-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-quiet: var(--accent-quiet);
+  --color-on-accent: var(--bg);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  /* Type scale — the only sizes that exist. */
+  --text-prose: 17px;
+  --text-prose--line-height: 1.65;
+  --text-name: 15px;
+  --text-name--line-height: 1.3;
+  --text-heading: 14px;
+  --text-heading--line-height: 1.4;
+  --text-body: 13px;
+  --text-body--line-height: 1.5;
+  --text-small: 12px;
+  --text-small--line-height: 1.4;
+  --text-meta: 11px;
+  --text-meta--line-height: 1.4;
+
+  /* `rounded-full` (avatars, pills) is built in. */
+  --radius-card: 16px;
+  --radius-control: 10px;
+  --radius-instrument: 4px; /* Dev Studio only */
+
+  --shadow-card: var(--elevation);
+
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+
+  --animate-fade-in: fade-in 150ms ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--accent-quiet);
+    color: var(--text);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Message prose: serif, 17/1.65, capped at a 64ch measure regardless of panel width. */
+  .prose-body {
+    font-family: var(--font-serif);
+    font-size: var(--text-prose);
+    line-height: var(--text-prose--line-height);
+    font-optical-sizing: auto;
+    max-width: 64ch;
+    overflow-wrap: break-word;
+  }
+
+  .prose-body p + p {
+    margin-top: 0.75em;
+  }
+
+  /* Meta tier: token counts, timestamps, latency. Tabular so live counters don't jitter. */
+  .meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    font-variant-numeric: tabular-nums;
+  }
 }

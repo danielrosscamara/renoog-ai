@@ -1,75 +1,110 @@
 import { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from './hooks/useTheme';
 import { useUIStore } from './stores/useUIStore';
 import { useChatStore } from './stores/useChatStore';
-import { useSettingsStore } from './components/settings/UseSettingsStore';
+import { useCharacterStore } from './stores/useCharacterStore';
+import { usePersonaStore } from './stores/usePersonaStore';
+import { Sidebar } from './components/layout/Sidebar';
+import { CharacterCard } from './components/character/CharacterCard';
+import { MessageBubble } from './components/chat/MessageBubble';
+import { fixtureCharacters, fixtureChats, fixturePersonas, fixtureTurns } from './dev/fixtures';
 
 /**
- * TEMPORARY test harness — not the real app UI.
- * Purpose: verify the wiring chain works end to end before building
- * the actual components on top of it.
+ * TEMPORARY design harness — not the real app shell.
+ * Renders build-order steps 1–4 from the UI brief (sidebar chat row,
+ * character card, message thread, light mode) against live stores, seeding
+ * dev fixtures when the backend returns nothing.
  */
 function App() {
-  const { theme, toggleTheme } = useTheme();
-  const { isSidebarOpen, toggleSidebar } = useUIStore();
-  const { chats, isLoading, loadChats } = useChatStore();
-  const { selected_model, provider, updateSettings, getActiveModel } = useSettingsStore();
+  useTheme();
+  const { isSidebarOpen, activeView, setActiveView } = useUIStore(
+    useShallow((s) => ({
+      isSidebarOpen: s.isSidebarOpen,
+      activeView: s.activeView,
+      setActiveView: s.setActiveView,
+    }))
+  );
+  const { chats, activeChatId, messageTurns, streamingChatIds, loadChats } = useChatStore(
+    useShallow((s) => ({
+      chats: s.chats,
+      activeChatId: s.activeChatId,
+      messageTurns: s.messageTurns,
+      streamingChatIds: s.streamingChatIds,
+      loadChats: s.loadChats,
+    }))
+  );
+  const { characters, loadCharacters } = useCharacterStore(
+    useShallow((s) => ({ characters: s.characters, loadCharacters: s.loadCharacters }))
+  );
+  const { personas, loadPersonas } = usePersonaStore(
+    useShallow((s) => ({ personas: s.personas, loadPersonas: s.loadPersonas }))
+  );
 
   useEffect(() => {
-    loadChats();
-  }, [loadChats]);
+    Promise.all([loadChats(), loadCharacters(), loadPersonas()]).then(() => {
+      if (!import.meta.env.DEV) return;
+      if (useChatStore.getState().chats.length === 0) {
+        useChatStore.setState({ chats: fixtureChats, messageTurns: fixtureTurns, activeChatId: 'chat_1' });
+      }
+      if (useCharacterStore.getState().characters.length === 0) {
+        useCharacterStore.setState({ characters: fixtureCharacters });
+      }
+      if (usePersonaStore.getState().personas.length === 0) {
+        usePersonaStore.setState({ personas: fixturePersonas, activePersonaId: 'persona_rin' });
+      }
+    });
+  }, [loadChats, loadCharacters, loadPersonas]);
+
+  const activeChat = chats.find((c) => c.id === activeChatId);
+  const character = characters.find((c) => c.id === activeChat?.character_id);
+  const turns = activeChatId ? messageTurns[activeChatId] || [] : [];
 
   return (
-    <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-primary)] p-8 space-y-6">
-      <h1 className="text-xl font-bold">frontend-v2 wiring test</h1>
+    <div className="min-h-screen bg-bg text-text">
+      <Sidebar />
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={toggleTheme}
-          className="px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--surface-0)] text-sm font-semibold"
-        >
-          Toggle theme (currently: {theme})
-        </button>
-
-        <button
-          onClick={toggleSidebar}
-          className="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-default)] text-sm"
-        >
-          Toggle sidebar flag (currently: {isSidebarOpen ? 'open' : 'closed'})
-        </button>
-      </div>
-
-      <div className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border-default)] space-y-2">
-        <h2 className="font-semibold">Settings store (persists to localStorage)</h2>
-        <p className="text-sm">Provider: <strong>{provider}</strong></p>
-        <p className="text-sm">Selected model: <strong>{selected_model}</strong></p>
-        <p className="text-sm">Resolved active model: <strong>{getActiveModel()}</strong></p>
-        <button
-          onClick={() => updateSettings({ selected_model: 'meta-llama/llama-3.3-70b-instruct' })}
-          className="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-default)] text-sm"
-        >
-          Change model (then refresh page — should persist)
-        </button>
-      </div>
-
-      <div className="p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--border-default)]">
-        <h2 className="font-semibold mb-2">Chats from backend (GET /api/v1/chats)</h2>
-        {isLoading ? (
-          <p className="text-[var(--text-secondary)] text-sm">Loading...</p>
-        ) : chats.length === 0 ? (
-          <p className="text-[var(--text-secondary)] text-sm">
-            No chats returned — either backend isn't running, or DB is empty.
-          </p>
+      <main
+        className={`min-h-screen pb-16 pr-8 pt-8 transition-[padding] ${
+          isSidebarOpen ? 'pl-[328px]' : 'pl-[124px]'
+        }`}
+      >
+        {activeView === 'gallery' ? (
+          <section>
+            <h1 className="mb-6 text-heading font-semibold text-text">Discover</h1>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+              {characters.map((c) => (
+                <CharacterCard key={c.id} character={c} onSelect={() => setActiveView('chat')} />
+              ))}
+            </div>
+          </section>
+        ) : activeView === 'chat' && activeChat ? (
+          <section className="mx-auto flex max-w-[720px] flex-col gap-8">
+            <header className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
+              <h1 className="truncate text-heading font-semibold text-text">{activeChat.title}</h1>
+              <span className="meta shrink-0 text-text-faint">{activeChat.model_name}</span>
+            </header>
+            {turns.map((turn) => {
+              const persona = personas.find((p) => p.id === turn.persona_id);
+              const isUser = turn.role === 'user';
+              return (
+                <MessageBubble
+                  key={turn.id}
+                  turn={turn}
+                  authorName={isUser ? persona?.name || 'You' : character?.name || 'Character'}
+                  authorAvatarUrl={isUser ? persona?.avatar_url : character?.avatar_url}
+                  isStreaming={Boolean(streamingChatIds[turn.chat_id]) && turn === turns[turns.length - 1]}
+                  onRegenerate={() => {}}
+                />
+              );
+            })}
+          </section>
         ) : (
-          <ul className="text-sm space-y-1">
-            {chats.map((c) => (
-              <li key={c.id}>
-                {c.title} — <span className="text-[var(--text-secondary)]">{c.id}</span>
-              </li>
-            ))}
-          </ul>
+          <p className="pt-16 text-center text-body text-text-faint">
+            {activeView === 'chat' ? 'Pick a chat from the sidebar.' : `“${activeView}” isn't built yet.`}
+          </p>
         )}
-      </div>
+      </main>
     </div>
   );
 }
