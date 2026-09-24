@@ -1,0 +1,5 @@
+/* Minors notice: plain neutral text, no box, never the accent. */
+.notice {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}

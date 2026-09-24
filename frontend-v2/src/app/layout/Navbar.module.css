@@ -1,0 +1,120 @@
+/* Navbar: sticky, solid background, bottom border. No blur or glass. */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--nav-height);
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  color: var(--text);
+}
+
+.logoIcon {
+  color: var(--accent);
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.links {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: inline-block;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+  font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.menuButton {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .nav {
+    justify-content: flex-end;
+  }
+
+  .links {
+    display: none;
+  }
+
+  .linksOpen {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: var(--space-3) var(--gutter) var(--space-4);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .linksOpen .link {
+    display: block;
+  }
+
+  .menuButton {
+    display: inline-flex;
+  }
+}
+
+/* Lamp toggle: ON (dark) glows in the accent, OFF (light) is plain. */
+.lamp {
+  color: var(--text-dim);
+  transition:
+    background var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+
+.lampOn,
+.lampOn:hover:not(:disabled) {
+  background: var(--accent-quiet);
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp {
+    transition: none;
+  }
+}

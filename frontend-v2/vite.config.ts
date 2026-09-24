@@ -1,8 +1,12 @@
+// Vite build config plus the Vitest setup (jsdom, jest-dom matchers).
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vitest/config'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    css: { modules: { classNameStrategy: 'non-scoped' } },
+  },
 })

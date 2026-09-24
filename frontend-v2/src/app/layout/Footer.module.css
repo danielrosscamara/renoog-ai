@@ -1,0 +1,24 @@
+/* Footer: quiet, stacked, separated from the page by a top border. */
+.footer {
+  margin-top: var(--space-8);
+  border-top: 1px solid var(--border);
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-block: var(--space-6);
+}
+
+.brand {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.line {
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}

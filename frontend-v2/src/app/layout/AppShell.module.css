@@ -1,0 +1,14 @@
+/* Shell: footer stays at the bottom on short pages. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.main {
+  flex: 1;
+}
+
+.main:focus {
+  outline: none;
+}

@@ -1,0 +1,22 @@
+/* Skeleton: surface block that pulses; still under reduced motion. */
+.skeleton {
+  min-height: 1em;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.round {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
