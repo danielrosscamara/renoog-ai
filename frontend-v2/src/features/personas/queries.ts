@@ -16,16 +16,26 @@ export const activePersonaQuery = queryOptions({
   queryFn: ({ signal }) => api.getActivePersona(signal),
 })
 
+const SET_ACTIVE_PERSONA_KEY = ['persona', 'set-active'] as const
+
 /**
  * Switches the active persona (PUT /personas/active). Optimistic: the cached
  * active persona changes at once, so the trigger avatar and the check mark move
  * before the server answers. On failure it rolls back and shows a toast.
- * Either way the persona queries are refetched afterwards.
+ *
+ * One scope, so quick switches reach the server one after another, in order.
+ * While a newer switch is still waiting, an older rollback or refetch is
+ * skipped, or the trigger would jump back to an older persona; when the last
+ * one settles the persona queries are refetched.
  */
 export function useSetActivePersona() {
   const client = useQueryClient()
+  // Callbacks run while their own mutation is still pending, so 1 means "only me".
+  const isLatest = () => client.isMutating({ mutationKey: SET_ACTIVE_PERSONA_KEY }) <= 1
 
   return useMutation({
+    mutationKey: SET_ACTIVE_PERSONA_KEY,
+    scope: { id: 'active-persona' },
     mutationFn: (persona: Persona) => api.setActivePersona(persona.id),
     onMutate: async (persona) => {
       await client.cancelQueries({ queryKey: queryKeys.persona.active })
@@ -34,9 +44,9 @@ export function useSetActivePersona() {
       return { previous }
     },
     onError: (_error, persona, context) => {
-      if (context?.previous) client.setQueryData(queryKeys.persona.active, context.previous)
+      if (isLatest() && context?.previous) client.setQueryData(queryKeys.persona.active, context.previous)
       toast.error(`Couldn’t switch to ${persona.name}. Please try again.`)
     },
-    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.persona.all }),
+    onSettled: () => (isLatest() ? client.invalidateQueries({ queryKey: queryKeys.persona.all }) : undefined),
   })
 }

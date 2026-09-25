@@ -16,13 +16,19 @@ export const allChatsQuery = queryOptions({
   queryFn: ({ signal }) => api.listChats({}, signal),
 })
 
-/** Deletes every chat (DELETE /chats), then refetches every chat list and detail. */
+/**
+ * Deletes every chat (DELETE /chats). Cached single chats are dropped, not
+ * refetched (they'd only 404), and the chat lists are refetched so shelves empty.
+ */
 export function useDeleteAllChats() {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: () => api.deleteAllChats(),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.chats.all }),
+    onSuccess: () => {
+      client.removeQueries({ queryKey: queryKeys.chats.details })
+      return client.invalidateQueries({ queryKey: queryKeys.chats.lists })
+    },
   })
 }
 

@@ -11,7 +11,9 @@ import { toast } from '@/components/toastStore'
 import { ChatListView } from '@/features/chat'
 import { CRISIS_SUPPORT_TEXT } from '@/features/safety'
 import { apiUrl } from '@/lib/api'
+import { queryKeys } from '@/lib/queryKeys'
 import { server } from '@/mocks/server'
+import { makeChat } from '@/test/fixtures'
 import { setMediaQuery } from '@/test/matchMedia'
 import { renderRoute } from '@/test/render'
 import { SettingsDialog } from './SettingsDialog'
@@ -156,6 +158,48 @@ describe('Chat', () => {
     expect(model).toHaveValue('llama3.1:8b')
   })
 
+  it('sends quick changes one after another and ends on the last choice', async () => {
+    // Both PATCHes are held until released, so the test controls the timing.
+    const gate = () => {
+      let resolve!: () => void
+      const promise = new Promise<void>((done) => (resolve = done))
+      return { promise, resolve }
+    }
+    const gates = [gate(), gate()]
+    const received: unknown[] = []
+    let server_ = { defaultPresetId: 'default', modelId: 'llama3.1:8b', responseLength: 'medium', modelNotice: null }
+    server.use(
+      http.get(apiUrl('/settings'), () => HttpResponse.json(server_)),
+      http.patch(apiUrl('/settings'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        const call = received.push(body) - 1
+        await gates[call]!.promise
+        server_ = { ...server_, ...body }
+        return HttpResponse.json(server_)
+      }),
+    )
+    const { user, dialog } = renderSettings()
+    const model = await within(section(dialog, 'Chat')).findByRole('combobox', { name: 'Model' })
+    await waitFor(() => expect(model).toBeEnabled())
+
+    await user.selectOptions(model, 'mistralai/mistral-nemo') // first, slow
+    await user.selectOptions(model, 'meta-llama/llama-3.1-70b-instruct') // second, right after
+    expect(model).toHaveValue('meta-llama/llama-3.1-70b-instruct')
+
+    // The second PATCH waits in the scope until the first one is answered.
+    await waitFor(() => expect(received).toHaveLength(1))
+    gates[0]!.resolve()
+    await waitFor(() => expect(received).toHaveLength(2))
+    expect(received).toEqual([{ modelId: 'mistralai/mistral-nemo' }, { modelId: 'meta-llama/llama-3.1-70b-instruct' }])
+    // The first answer must not pull the screen back to the first choice.
+    expect(model).toHaveValue('meta-llama/llama-3.1-70b-instruct')
+
+    gates[1]!.resolve()
+    await waitFor(() => expect(server_.modelId).toBe('meta-llama/llama-3.1-70b-instruct'))
+    await waitFor(() => expect(model).toHaveValue('meta-llama/llama-3.1-70b-instruct'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('shows the current model in a disabled select with Try again when /models fails', async () => {
     server.use(http.get(apiUrl('/models'), () => failure(), { once: true }))
     const { user, dialog } = renderSettings()
@@ -197,7 +241,9 @@ describe('Chat', () => {
 
 describe('Data', () => {
   it('only enables Delete once DELETE is typed; success clears the story list', async () => {
-    const { user, dialog } = renderSettings(<ChatListView />)
+    const { user, dialog, client } = renderSettings(<ChatListView />)
+    // A chat opened earlier stays cached until the delete drops it.
+    client.setQueryData(queryKeys.chats.detail('chat-rowan'), makeChat())
     expect(await screen.findByRole('link', { name: 'Rowan of the Hearth', hidden: true })).toBeInTheDocument()
 
     await user.click(within(section(dialog, 'Data')).getByRole('button', { name: 'Delete all chats…' }))
@@ -216,6 +262,7 @@ describe('Data', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete all chats?' })).not.toBeInTheDocument())
     expect(await screen.findByRole('status')).toHaveTextContent('All chats deleted.')
     expect(await screen.findByText('No stories yet')).toBeInTheDocument()
+    expect(client.getQueryCache().findAll({ queryKey: queryKeys.chats.details })).toHaveLength(0)
   })
 
   it('keeps the confirm open and explains when deleting fails', async () => {

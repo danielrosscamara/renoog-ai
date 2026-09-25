@@ -12,7 +12,11 @@ export const queryKeys = {
   models: ['models'] as const,
   chats: {
     all: ['chats'] as const,
+    /** Prefix of every chat list (any limit). */
+    lists: ['chats', 'list'] as const,
     list: (limit?: number) => ['chats', 'list', { limit }] as const,
+    /** Prefix of every single chat. */
+    details: ['chats', 'detail'] as const,
     detail: (id: string) => ['chats', 'detail', id] as const,
   },
   characters: {

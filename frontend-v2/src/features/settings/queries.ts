@@ -23,14 +23,26 @@ export const modelsQuery = queryOptions({
   staleTime: 5 * 60_000,
 })
 
+const UPDATE_SETTINGS_KEY = ['settings', 'update'] as const
+
 /**
  * PATCH /settings, optimistic: the cached settings change at once so the
  * control shows the new value. On failure it rolls back and shows a toast.
+ *
+ * One scope, so quick changes are sent one after another, in order: the last
+ * choice is also the last PATCH the server sees. While a newer change is still
+ * waiting, an older answer (or rollback) is not written to the cache, or the
+ * screen would jump back to an older choice; when the last one settles the
+ * settings are refetched, so the screen always ends on what the server has.
  */
 export function useUpdateSettings() {
   const client = useQueryClient()
+  // Callbacks run while their own mutation is still pending, so 1 means "only me".
+  const isLatest = () => client.isMutating({ mutationKey: UPDATE_SETTINGS_KEY }) <= 1
 
   return useMutation({
+    mutationKey: UPDATE_SETTINGS_KEY,
+    scope: { id: 'settings' },
     mutationFn: (patch: UserSettingsPatch) => api.updateSettings(patch),
     onMutate: async (patch) => {
       await client.cancelQueries({ queryKey: queryKeys.settings })
@@ -39,9 +51,12 @@ export function useUpdateSettings() {
       return { previous }
     },
     onError: (_error, _patch, context) => {
-      if (context?.previous) client.setQueryData(queryKeys.settings, context.previous)
+      if (isLatest() && context?.previous) client.setQueryData(queryKeys.settings, context.previous)
       toast.error('Couldn’t save that setting. Please try again.')
     },
-    onSuccess: (saved) => client.setQueryData(queryKeys.settings, saved),
+    onSuccess: (saved) => {
+      if (isLatest()) client.setQueryData(queryKeys.settings, saved)
+    },
+    onSettled: () => (isLatest() ? client.invalidateQueries({ queryKey: queryKeys.settings }) : undefined),
   })
 }

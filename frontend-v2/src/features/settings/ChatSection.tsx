@@ -101,11 +101,14 @@ const toModelOption = (model: Model): Option => ({
   group: PROVIDER_LABELS[model.provider],
 })
 
+/** Module level so `select` keeps one identity and TanStack Query can reuse its result. */
+const toModelOptions = (list: Model[]): Option[] => list.map(toModelOption)
+
 export function ChatSection() {
   const { sendWith, setSendWith } = useSettingsStore()
   const settings = useQuery(settingsQuery)
   const presets = useQuery(presetsQuery)
-  const models = useQuery({ ...modelsQuery, select: (list: Model[]) => list.map(toModelOption) })
+  const models = useQuery({ ...modelsQuery, select: toModelOptions })
   const update = useUpdateSettings()
 
   return (
