@@ -9,9 +9,17 @@
     <link rel="stylesheet"
          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Nunito:wght@700;800&display=swap" />
   <script>
+    // Before first paint, so there is no flash of the wrong theme or text size.
+    // Mirrors features/settings/useSettingsStore.ts; keep keys and values in sync.
     try {
+      var root = document.documentElement
       var t = localStorage.getItem('renoog.theme')
-      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      if (t === 'system') {
+        t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+      }
+      if (t === 'light' || t === 'dark') root.dataset.theme = t
+      var size = { small: '15px', medium: '16px', large: '18px' }[localStorage.getItem('renoog.chatTextSize')]
+      if (size) root.style.setProperty('--chat-font-size', size)
     } catch (_) {}
   </script>
     <title>Renoog AI</title>

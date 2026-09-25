@@ -1,0 +1,151 @@
+/* Character card. The name link stretches over the whole card (::after);
+   the bookmark button sits above it so both stay clickable. */
+.card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-raised);
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--border-hover);
+}
+
+.link {
+  color: inherit;
+}
+
+.link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.link:focus-visible {
+  outline: none;
+}
+
+.card:has(.link:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bookmark {
+  position: relative;
+  z-index: 1;
+}
+
+.bookmarked {
+  color: var(--accent-text);
+}
+
+/* Grid tile */
+.tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tile:hover {
+  transform: translateY(-2px);
+}
+
+.art {
+  position: relative;
+  aspect-ratio: 3 / 4;
+}
+
+.scrim {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-7) var(--space-4) var(--space-4);
+  background: linear-gradient(to top, var(--scrim), var(--scrim-soft));
+  color: var(--on-image);
+}
+
+.scrim > :first-child {
+  margin-bottom: var(--space-1);
+}
+
+.name {
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  color: var(--on-image);
+}
+
+.title {
+  font-size: var(--text-sm);
+  color: var(--on-image-dim);
+}
+
+.quote {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* Margin, not padding: padding would let a third clamped line show through. */
+  margin: var(--space-3) var(--space-4) var(--space-4);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+.tile .bookmark {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+/* List row */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: var(--text-md);
+}
+
+.rowTitle {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}
+
+.rowQuote,
+.rowTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowQuote {
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+@media (max-width: 639.98px) {
+  .rowGenre {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile:hover {
+    transform: none;
+  }
+}

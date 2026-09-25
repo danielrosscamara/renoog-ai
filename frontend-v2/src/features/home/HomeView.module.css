@@ -1,0 +1,105 @@
+/* Home: greeting, story shelf, featured row, forge banner. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  padding-block: var(--space-6) var(--space-8);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.shelf,
+.featured {
+  display: grid;
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.shelf {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.featured {
+  /* 170px lets all six featured characters fit one row on a desktop container. */
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-5);
+}
+
+.featured > li {
+  display: flex;
+  flex-direction: column;
+}
+
+.featured > li > * {
+  flex: 1;
+}
+
+.cardSkeleton {
+  border-radius: var(--radius-card);
+}
+
+.tileSkeleton {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-card);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-card);
+  background: var(--accent-quiet);
+  overflow: hidden;
+}
+
+.bannerText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 52ch;
+}
+
+.bannerTitle {
+  font-size: var(--text-2xl);
+}
+
+.bannerBody {
+  color: var(--text-dim);
+}
+
+.bannerText > :last-child {
+  margin-top: var(--space-2);
+}
+
+.bannerArt {
+  flex-shrink: 0;
+  width: 200px;
+  height: auto;
+  margin-block: calc(var(--space-6) * -1);
+}
+
+@media (max-width: 767.98px) {
+  .banner {
+    padding: var(--space-5);
+  }
+
+  .bannerArt {
+    display: none;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .featured {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}

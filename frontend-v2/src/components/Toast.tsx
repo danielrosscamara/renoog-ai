@@ -12,7 +12,10 @@ export function Toaster() {
   const toasts = useToasts()
 
   return (
-    <section aria-label="Notifications" className={styles.region}>
+    // aria-live keeps the region readable while a modal dialog hides the rest of
+    // the page (Radix skips [aria-live] elements), so toasts raised from a dialog
+    // are still announced.
+    <section aria-label="Notifications" aria-live="polite" className={styles.region}>
       {toasts.map((item) => {
         const Icon = ICONS[item.kind]
         return (

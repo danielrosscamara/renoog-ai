@@ -1,0 +1,87 @@
+/* Account menu: a round avatar trigger and a right aligned dropdown. Radix is
+   unstyled, so everything here comes from tokens. */
+.trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.trigger:hover,
+.trigger[data-state='open'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.trigger[data-state='open'] > * {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.content {
+  z-index: 50;
+  width: 260px;
+  /* Keep the 8px collision gap on both sides even on very narrow screens. */
+  max-width: calc(100vw - var(--space-2) * 2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-raised);
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: menu-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.separator {
+  height: 1px;
+  margin: var(--space-2) calc(var(--space-2) * -1);
+  background: var(--border);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+/* Radix marks the item under the pointer or keyboard as highlighted. */
+.item[data-highlighted] {
+  background: var(--surface-3);
+}
+
+.item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.item[data-highlighted] .icon {
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content {
+    animation: none;
+  }
+}

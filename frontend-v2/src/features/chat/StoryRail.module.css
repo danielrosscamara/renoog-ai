@@ -1,0 +1,143 @@
+/* Story rail: sticky left column; collapsed it is a strip of avatars. */
+.rail {
+  position: sticky;
+  top: var(--nav-height);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: calc(100dvh - var(--nav-height));
+  padding: var(--space-4) var(--space-3);
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow-y: auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.collapsed .head {
+  justify-content: center;
+}
+
+.heading {
+  font-size: var(--text-md);
+  padding-left: var(--space-2);
+}
+
+.search {
+  position: relative;
+  display: block;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--text-faint);
+}
+
+.searchInput:hover {
+  border-color: var(--border-hover);
+}
+
+.body {
+  flex: 1;
+}
+
+.loading,
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.list {
+  padding: 0;
+  list-style: none;
+}
+
+.collapsed .loading,
+.collapsed .list {
+  align-items: center;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--text-dim);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.collapsed .active {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.collapsed .item {
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name,
+.scene {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.scene {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.note {
+  padding-inline: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}

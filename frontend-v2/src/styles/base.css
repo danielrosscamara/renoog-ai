@@ -57,3 +57,6 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--font-heading); font-weight: 700;
 }
 .skip-link:focus { top: var(--space-2); }
+/* html already reserves the scrollbar gutter (scrollbar-gutter: stable), so the
+   margin Radix adds when a modal locks scrolling would shift the page sideways. */
+html body[data-scroll-locked] { margin-right: 0 !important; }

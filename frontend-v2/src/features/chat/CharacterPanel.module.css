@@ -1,0 +1,86 @@
+/* Character panel: sticky right column; collapsed it keeps only the toggle. */
+.panel {
+  position: sticky;
+  top: var(--nav-height);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: calc(100dvh - var(--nav-height));
+  padding: var(--space-4);
+  border-left: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow-y: auto;
+}
+
+.head {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.collapsed {
+  padding-inline: var(--space-2);
+}
+
+.collapsed .head {
+  justify-content: center;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.body[hidden] {
+  display: none;
+}
+
+.portrait {
+  aspect-ratio: 4 / 5;
+  width: 100%;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.name {
+  font-size: var(--text-xl);
+}
+
+.tagline {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.meta dt {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.meta dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}

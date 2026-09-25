@@ -1,8 +1,8 @@
 // Dev only preview at /dev/components: every shared component in every variant,
 // for checking by eye in both themes (flip the lamp in the navbar).
 // The router registers this page only when import.meta.env.DEV is true.
-import { ArrowRight, Inbox, Plus, Settings, Sparkles, Trash2 } from 'lucide-react'
-import sampleArt from '../1_assets/hero.png'
+import { ArrowRight, Inbox, House, Plus, Sparkles, Trash2 } from 'lucide-react'
+import sampleArt from '../features/home/hero.png'
 import { Button, ButtonLink, IconButton, IconLink, type ButtonSize, type ButtonVariant } from '../components/Button'
 import { Chip } from '../components/Chip'
 import { PageHeader } from '../components/PageHeader'
@@ -64,8 +64,8 @@ export function ComponentsPreview() {
               <Trash2 size={size === 'sm' ? 16 : 20} />
             </IconButton>
           ))}
-          <IconLink to={paths.settings} label="Settings (IconLink)">
-            <Settings size={20} />
+          <IconLink to={paths.home} label="Home (IconLink)">
+            <House size={20} />
           </IconLink>
         </div>
         <div className={styles.narrow}>

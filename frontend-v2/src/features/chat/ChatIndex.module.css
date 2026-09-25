@@ -1,0 +1,7 @@
+/* Empty state actions: side by side, wrapping on narrow screens. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}

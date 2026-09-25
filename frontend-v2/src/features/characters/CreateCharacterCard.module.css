@@ -1,0 +1,58 @@
+/* Dashed "add" card, matching CharacterCard's grid tile or list row. */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  border: 1px dashed var(--border-hover);
+  border-radius: var(--radius-card);
+  color: var(--text-dim);
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-quiet);
+  color: var(--text);
+}
+
+.tile {
+  flex-direction: column;
+  justify-content: center;
+  /* Grid cells stretch it to the height of the character tiles beside it. */
+  min-height: 240px;
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.row {
+  padding: var(--space-3) var(--space-4);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-quiet);
+  color: var(--accent-text);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.body {
+  font-size: var(--text-sm);
+}

@@ -1,0 +1,43 @@
+/* Chat room: three columns under the navbar. Side columns scroll on their own. */
+.layout {
+  --rail-width: 280px;
+  --panel-width: 300px;
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr) var(--panel-width);
+  min-height: calc(100dvh - var(--nav-height));
+}
+
+.railCollapsed {
+  --rail-width: 72px;
+}
+
+.panelCollapsed {
+  --panel-width: 64px;
+}
+
+.main {
+  min-width: 0;
+  padding-block: var(--space-6);
+}
+
+/* Tablet: no room for the character panel. */
+@media (max-width: 1023.98px) {
+  .layout {
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  }
+
+  .layout > :last-child {
+    display: none;
+  }
+}
+
+/* Phone: the chat takes the full width; the header links back to My Stories. */
+@media (max-width: 767.98px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout > :first-child {
+    display: none;
+  }
+}

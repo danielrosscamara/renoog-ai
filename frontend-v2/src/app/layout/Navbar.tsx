@@ -1,13 +1,14 @@
-// Sticky top bar: logo, main links, lamp theme toggle and account link.
+// Sticky top bar: logo, main links, lamp theme toggle and the account menu.
 // The lamp is ON in dark mode (Lamplight) and OFF in light mode.
 // Under 768px the links collapse behind a menu button (closes on link click or Escape).
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router'
-import { Lamp, LampDesk, Menu, UserRound, X } from 'lucide-react'
-import { IconButton, IconLink } from '../../components/Button'
+import { Lamp, LampDesk, Menu, X } from 'lucide-react'
+import { IconButton } from '../../components/Button'
 import { useSettingsStore } from '../../features/settings'
 import { cn } from '../../lib/cn'
 import { paths } from '../../lib/paths'
+import { AccountMenu } from './AccountMenu'
 import { navItems } from './navItems'
 import styles from './Navbar.module.css'
 
@@ -44,7 +45,7 @@ export function Navbar() {
               <li key={item.to}>
                 <NavLink
                   to={item.to}
-                  end={item.to === paths.home}
+                  end={item.end}
                   className={({ isActive }) => cn(styles.link, isActive && styles.active)}
                   onClick={() => setMenuOpen(false)}
                 >
@@ -64,9 +65,7 @@ export function Navbar() {
           >
             <Lamp size={20} />
           </IconButton>
-          <IconLink to={paths.settings} label="Account settings">
-            <UserRound size={20} />
-          </IconLink>
+          <AccountMenu />
           <IconButton
             ref={menuButtonRef}
             className={styles.menuButton}

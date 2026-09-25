@@ -1,0 +1,173 @@
+/* Settings dialog: vertical tabs + panel on desktop, one list on phones,
+   and the shared field styles the sections use. */
+.tabs {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.tabList {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tab {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tab[data-state='active'] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Radix keeps inactive tab panels in the DOM with [hidden]; display: flex above
+   would otherwise override it and give each one a grid cell. */
+.panel[hidden] {
+  display: none;
+}
+
+.panel:focus-visible {
+  outline-offset: var(--space-2);
+}
+
+.sectionTitle {
+  font-size: var(--text-lg);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.fieldHint {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.selectRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.select,
+.input {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.select:hover:not(:disabled),
+.input:hover {
+  border-color: var(--border-hover);
+}
+
+.select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Neutral, informational: not the accent and not a warning colour. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}
+
+.noticeIcon {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* The only danger styled control: the final "Delete all chats" button. */
+.confirmActions .danger {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.confirmActions .danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.facts dt {
+  color: var(--text-dim);
+}
+
+.support {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}
